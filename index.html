@@ -101,6 +101,11 @@
     };
     timeline.push(calibration_loop);
 
+    // Device detection
+    const is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
+    const action_text = is_touch_device ? "tap the screen" : "press the SPACE bar";
+    const action_instruction = is_touch_device ? "Tap the screen!" : "Press SPACE!";
+
     // Setup Game Logic
     let opponent_roles = jsPsych.randomization.shuffle(['Sauron', 'Saruman']);
     let provocative_opponent = opponent_roles[0];
@@ -123,6 +128,21 @@
     }
     trial_opponents = jsPsych.randomization.shuffle(trial_opponents);
 
+    let tutorial_timeline_variables = [];
+    for(let i=0; i<10; i++) {
+        let opp = jsPsych.randomization.sampleWithoutReplacement([provocative_opponent, non_provocative_opponent], 1)[0];
+        let p_win = jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0];
+        let p_pun = jsPsych.randomization.sampleWithoutReplacement([1,2,3,4,5,6,7,8], 1)[0];
+
+        tutorial_timeline_variables.push({
+            trial_num: i + 1,
+            opponent: opp,
+            predefined_win: p_win,
+            opponent_punishment: p_pun,
+            is_tutorial: true
+        });
+    }
+
     let timeline_variables = [];
     let p_win_idx = 0, p_pun_idx = 0;
     let np_win_idx = 0, np_pun_idx = 0;
@@ -137,7 +157,8 @@
             trial_num: i + 1,
             opponent: opp,
             predefined_win: p_win,
-            opponent_punishment: p_pun
+            opponent_punishment: p_pun,
+            is_tutorial: false
         });
     }
 
@@ -147,7 +168,7 @@
         pages: [
             '<h2>Fight-or-Escape Paradigm</h2><p>You have been assigned the character of <strong>Frodo</strong>.</p><p>Sauron and Saruman are sending out orcs to obtain the Ring of Power from you. You will compete against them.</p>',
             '<p>In each trial, you will play against either Sauron or Saruman. The winner of each trial receives one point. Sauron and Saruman are teamed up, so their points are combined.</p><p>At the end of the game, the party with the highest score wins.</p>',
-            '<p>The winner of each trial is decided in a reaction time task. An exclamation mark (!) will appear, followed by a picture of an orc. You must press the SPACE bar as quickly as possible.</p><p>If you lose, you will be punished with an unpleasant sound.</p>',
+            `<p>The winner of each trial is decided in a reaction time task. An exclamation mark (!) will appear, followed by a picture of an orc. You must ${action_text} as quickly as possible.</p><p>If you lose, you will be punished with an unpleasant sound.</p>`,
             '<p>Before the task, you will select a punishment level (1-8) for your opponent, in case you win.</p><p>Also, at the beginning of each trial, you have the option to put on the Ring and become invisible. If you do this, you escape the orc: nobody wins a point and nobody gets punished.</p>',
             '<p>You can use the Ring a maximum of <strong>10 times</strong>.</p><p>Click Next to begin the game!</p>'
         ],
@@ -158,13 +179,23 @@
     let frodo_score = 0;
     let opponents_score = 0;
 
+    // Tutorial Instructions
+    timeline.push({
+        type: jsPsychInstructions,
+        pages: [
+            '<h2>Tutorial</h2><p>Before the real game starts, you will play 10 practice rounds.</p><p>These rounds will not count towards your final score.</p><p>Click Next to begin the tutorial!</p>'
+        ],
+        show_clickable_nav: true
+    });
+
     // Trial Loop
-    let trial_procedure = {
-        timeline: [
+    let trial_timeline = [
             {
                 type: jsPsychHtmlButtonResponse,
                 stimulus: function() {
-                    return `<h2>Round ${jsPsych.timelineVariable('trial_num')} / 40</h2><p>Your opponent is <strong>${jsPsych.timelineVariable('opponent')}</strong>.</p>`;
+                    let total_rounds = jsPsych.timelineVariable('is_tutorial') ? 10 : 40;
+                    let round_type = jsPsych.timelineVariable('is_tutorial') ? 'Practice Round' : 'Round';
+                    return `<h2>${round_type} ${jsPsych.timelineVariable('trial_num')} / ${total_rounds}</h2><p>Your opponent is <strong>${jsPsych.timelineVariable('opponent')}</strong>.</p>`;
                 },
                 choices: ['Continue'],
                 on_finish: function() {
@@ -178,17 +209,22 @@
                 },
                 choices: ['Yes, use the ring', 'No, do not use the ring'],
                 on_finish: function(data) {
+                    data.escaped = false;
+                    data.ring_use_attempt = false;
                     if (data.response === 0) {
+                        data.ring_use_attempt = true;
                         if (ring_uses < 10) {
                             ring_uses++;
                             window.escaped_this_trial = true;
                             data.msg = "You escape the orc";
+                            data.escaped = true;
                         } else {
                             data.msg = "You cannot use the ring anymore";
                         }
                     } else {
                         data.msg = null;
                     }
+                    data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
                 }
             },
             {
@@ -215,6 +251,7 @@
                         choices: ['1', '2', '3', '4', '5', '6', '7', '8'],
                         on_finish: function(data) {
                             data.participant_punishment = data.response + 1;
+                            data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
                         }
                     },
                     {
@@ -227,9 +264,23 @@
                     },
                     {
                         type: jsPsychHtmlKeyboardResponse,
-                        stimulus: '<div class="stimulus-emoji">!</div><div class="stimulus-emoji">👹</div><p>Press SPACE!</p>',
+                        stimulus: `<div id="touch-target" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;"><div class="stimulus-emoji">!</div><div class="stimulus-emoji">👹</div><p>${action_instruction}</p></div>`,
                         choices: [' '],
                         trial_duration: 2000,
+                        on_load: function() {
+                            const start_time = performance.now();
+                            const target = document.getElementById('touch-target');
+                            if (target) {
+                                const handleTouch = function(e) {
+                                    e.preventDefault();
+                                    const rt = performance.now() - start_time;
+                                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
+                                    jsPsych.finishTrial({rt: rt, response: 'touch'});
+                                };
+                                target.addEventListener('touchstart', handleTouch, {once: true});
+                                target.addEventListener('mousedown', handleTouch, {once: true});
+                            }
+                        },
                         on_finish: function(data) {
                             let rt = data.rt;
                             let predefined_win = jsPsych.timelineVariable('predefined_win');
@@ -242,14 +293,18 @@
                                 participant_won = false;
                             }
 
-                            if (participant_won) {
-                                frodo_score++;
-                            } else {
-                                opponents_score++;
+                            if (!jsPsych.timelineVariable('is_tutorial')) {
+                                if (participant_won) {
+                                    frodo_score++;
+                                } else {
+                                    opponents_score++;
+                                }
                             }
 
                             data.participant_won = participant_won;
                             data.opponent_punishment = opponent_punishment;
+                            data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
+                            data.opponent = jsPsych.timelineVariable('opponent');
                         }
                     },
                     {
@@ -280,10 +335,28 @@
                     return !window.escaped_this_trial;
                 }
             }
+        ];
+
+    let tutorial_procedure = {
+        timeline: trial_timeline,
+        timeline_variables: tutorial_timeline_variables
+    };
+    timeline.push(tutorial_procedure);
+
+    // Main Game Instructions
+    timeline.push({
+        type: jsPsychInstructions,
+        pages: [
+            '<h2>Tutorial Complete</h2><p>You have finished the practice rounds.</p><p>The real game is about to begin. These rounds will count towards your score.</p><p>Click Next to begin!</p>'
         ],
+        show_clickable_nav: true
+    });
+
+    let main_trial_procedure = {
+        timeline: trial_timeline,
         timeline_variables: timeline_variables
     };
-    timeline.push(trial_procedure);
+    timeline.push(main_trial_procedure);
 
     // Post-task ratings
     timeline.push({

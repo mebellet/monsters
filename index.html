@@ -1,28 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Monster Game - jsPsych Experiment</title>
+    <title>Fight-or-Escape Paradigm</title>
     <script src="https://unpkg.com/jspsych@7"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-button-response"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response"></script>
-    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@1"></script>
+    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.4.0"></script>
     <link href="https://unpkg.com/jspsych@7/css/jspsych.css" rel="stylesheet" type="text/css" />
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-        }
-        .jspsych-content {
-            max-width: 800px;
-            margin: 50px auto;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f0f0f0; }
+        .jspsych-content { max-width: 800px; margin: 50px auto; }
+        .stimulus-emoji { font-size: 100px; line-height: 1.2; }
     </style>
 </head>
 <body>
 <div id="jspsych-target"></div>
 
 <script>
-    // Initialize jsPsych
     const jsPsych = initJsPsych({
         display_element: 'jspsych-target',
         on_finish: function() {
@@ -30,57 +26,312 @@
         }
     });
 
-    // Generate unique subject ID
     const subject_id = jsPsych.randomization.randomID(10);
     const filename = `${subject_id}.csv`;
+    jsPsych.data.addProperties({subject_id: subject_id});
 
-    // Create timeline
     const timeline = [];
 
-    // Welcome trial
+    // Audio context and generation
+    let audioCtx;
+    let baseTolerance = 0.5;
+
+    function playScratch(level) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        let duration = 1.5;
+        let osc = audioCtx.createOscillator();
+        let gainNode = audioCtx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800 + (level * 100), audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(1000 + (level * 100), audioCtx.currentTime + duration);
+
+        let volume = baseTolerance * (0.2 + 0.1 * level);
+        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // Initialize audio context on first interaction
     timeline.push({
         type: jsPsychHtmlButtonResponse,
-        stimulus: '<h1>Welcome to the Monster Game!</h1><p>In this experiment, you will encounter monsters and make decisions.</p>',
-        choices: ['Start Experiment'],
-        on_finish: function(data) {
-            data.subject_id = subject_id;
+        stimulus: '<h1>Welcome</h1><p>This experiment involves audio. Please make sure your speakers/headphones are on.</p>',
+        choices: ['Start'],
+        on_finish: function() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtx.resume();
         }
     });
 
-    // Example game trial - placeholder
-    timeline.push({
+    // Volume Calibration
+    let test_volume_trial = {
         type: jsPsychHtmlButtonResponse,
-        stimulus: '<h1>🐲 A wild monster appears!</h1><p>What do you do?</p>',
-        choices: ['Attack', 'Defend', 'Run Away'],
+        stimulus: '<h1>Volume Calibration</h1>' +
+                  '<p>We need to find your maximum tolerance for the unpleasant noise used in this game.</p>' +
+                  '<p>Click the button below to hear the noise. Adjust it until it is the loudest unpleasant sound you can tolerate without pain.</p>',
+        choices: ['Play Sound', 'Too Loud (Decrease)', 'Too Soft (Increase)', 'This is my maximum tolerance (Done)'],
         on_finish: function(data) {
-            data.subject_id = subject_id;
-            data.trial_type = 'monster_encounter';
+            if(data.response === 0) {
+                playScratch(8);
+            } else if (data.response === 1) {
+                baseTolerance = Math.max(0.1, baseTolerance - 0.1);
+                playScratch(8);
+            } else if (data.response === 2) {
+                baseTolerance = Math.min(1.0, baseTolerance + 0.1);
+                playScratch(8);
+            }
         }
+    };
+
+    let calibration_loop = {
+        timeline: [test_volume_trial],
+        loop_function: function(data) {
+            if(data.values()[0].response === 3) {
+                return false;
+            } else {
+                return true;
+            }
+        }
+    };
+    timeline.push(calibration_loop);
+
+    // Setup Game Logic
+    let opponent_roles = jsPsych.randomization.shuffle(['Sauron', 'Saruman']);
+    let provocative_opponent = opponent_roles[0];
+    let non_provocative_opponent = opponent_roles[1];
+
+    jsPsych.data.addProperties({
+        provocative_opponent: provocative_opponent,
+        non_provocative_opponent: non_provocative_opponent
     });
 
-    // Add more trials here as needed
-    // This is where you would add your game logic
+    let prov_punishments = jsPsych.randomization.shuffle([4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8]);
+    let non_prov_punishments = jsPsych.randomization.shuffle([1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4]);
+    let prov_wins = jsPsych.randomization.shuffle([true,true,true,true,true,true,true,true,true,true,false,false,false,false,false,false,false,false,false,false]);
+    let non_prov_wins = jsPsych.randomization.shuffle([true,true,true,true,true,true,true,true,true,true,false,false,false,false,false,false,false,false,false,false]);
 
-    // End screen
+    let trial_opponents = [];
+    for(let i=0; i<20; i++) {
+        trial_opponents.push(provocative_opponent);
+        trial_opponents.push(non_provocative_opponent);
+    }
+    trial_opponents = jsPsych.randomization.shuffle(trial_opponents);
+
+    let timeline_variables = [];
+    let p_win_idx = 0, p_pun_idx = 0;
+    let np_win_idx = 0, np_pun_idx = 0;
+
+    for(let i=0; i<40; i++) {
+        let opp = trial_opponents[i];
+        let is_prov = (opp === provocative_opponent);
+        let p_win = is_prov ? prov_wins[p_win_idx++] : non_prov_wins[np_win_idx++];
+        let p_pun = is_prov ? prov_punishments[p_pun_idx++] : non_prov_punishments[np_pun_idx++];
+
+        timeline_variables.push({
+            trial_num: i + 1,
+            opponent: opp,
+            predefined_win: p_win,
+            opponent_punishment: p_pun
+        });
+    }
+
+    // Instructions
+    timeline.push({
+        type: jsPsychInstructions,
+        pages: [
+            '<h2>Fight-or-Escape Paradigm</h2><p>You have been assigned the character of <strong>Frodo</strong>.</p><p>Sauron and Saruman are sending out orcs to obtain the Ring of Power from you. You will compete against them.</p>',
+            '<p>In each trial, you will play against either Sauron or Saruman. The winner of each trial receives one point. Sauron and Saruman are teamed up, so their points are combined.</p><p>At the end of the game, the party with the highest score wins.</p>',
+            '<p>The winner of each trial is decided in a reaction time task. An exclamation mark (!) will appear, followed by a picture of an orc. You must press the SPACE bar as quickly as possible.</p><p>If you lose, you will be punished with an unpleasant sound.</p>',
+            '<p>Before the task, you will select a punishment level (1-8) for your opponent, in case you win.</p><p>Also, at the beginning of each trial, you have the option to put on the Ring and become invisible. If you do this, you escape the orc: nobody wins a point and nobody gets punished.</p>',
+            '<p>You can use the Ring a maximum of <strong>10 times</strong>.</p><p>Click Next to begin the game!</p>'
+        ],
+        show_clickable_nav: true
+    });
+
+    let ring_uses = 0;
+    let frodo_score = 0;
+    let opponents_score = 0;
+
+    // Trial Loop
+    let trial_procedure = {
+        timeline: [
+            {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: function() {
+                    return `<h2>Round ${jsPsych.timelineVariable('trial_num')} / 40</h2><p>Your opponent is <strong>${jsPsych.timelineVariable('opponent')}</strong>.</p>`;
+                },
+                choices: ['Continue'],
+                on_finish: function() {
+                    window.escaped_this_trial = false;
+                }
+            },
+            {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: function() {
+                    return `<p>You have used the ring ${ring_uses} out of 10 times.</p><p>Do you want to use the ring to escape the confrontation?</p>`;
+                },
+                choices: ['Yes, use the ring', 'No, do not use the ring'],
+                on_finish: function(data) {
+                    if (data.response === 0) {
+                        if (ring_uses < 10) {
+                            ring_uses++;
+                            window.escaped_this_trial = true;
+                            data.msg = "You escape the orc";
+                        } else {
+                            data.msg = "You cannot use the ring anymore";
+                        }
+                    } else {
+                        data.msg = null;
+                    }
+                }
+            },
+            {
+                timeline: [{
+                    type: jsPsychHtmlButtonResponse,
+                    stimulus: function() {
+                        let last_data = jsPsych.data.get().last(1).values()[0];
+                        return `<h2>${last_data.msg}</h2>`;
+                    },
+                    choices: ['Continue']
+                }],
+                conditional_function: function() {
+                    let last_data = jsPsych.data.get().last(1).values()[0];
+                    return last_data.msg !== null;
+                }
+            },
+            {
+                timeline: [
+                    {
+                        type: jsPsychHtmlButtonResponse,
+                        stimulus: function() {
+                            return `<p>Select a punishment level for ${jsPsych.timelineVariable('opponent')} in case you win.</p>`;
+                        },
+                        choices: ['1', '2', '3', '4', '5', '6', '7', '8'],
+                        on_finish: function(data) {
+                            data.participant_punishment = data.response + 1;
+                        }
+                    },
+                    {
+                        type: jsPsychHtmlKeyboardResponse,
+                        stimulus: '<div class="stimulus-emoji">!</div>',
+                        choices: "NO_KEYS",
+                        trial_duration: function() {
+                            return jsPsych.randomization.sampleWithoutReplacement([500, 750, 1000, 1250, 1500], 1)[0];
+                        }
+                    },
+                    {
+                        type: jsPsychHtmlKeyboardResponse,
+                        stimulus: '<div class="stimulus-emoji">!</div><div class="stimulus-emoji">👹</div><p>Press SPACE!</p>',
+                        choices: [' '],
+                        trial_duration: 2000,
+                        on_finish: function(data) {
+                            let rt = data.rt;
+                            let predefined_win = jsPsych.timelineVariable('predefined_win');
+                            let opponent_punishment = jsPsych.timelineVariable('opponent_punishment');
+
+                            let participant_won = false;
+                            if (rt !== null && rt <= 500) {
+                                participant_won = predefined_win;
+                            } else {
+                                participant_won = false;
+                            }
+
+                            if (participant_won) {
+                                frodo_score++;
+                            } else {
+                                opponents_score++;
+                            }
+
+                            data.participant_won = participant_won;
+                            data.opponent_punishment = opponent_punishment;
+                        }
+                    },
+                    {
+                        type: jsPsychHtmlButtonResponse,
+                        stimulus: function() {
+                            let last_task = jsPsych.data.get().filter({trial_type: 'html-keyboard-response'}).last(1).values()[0];
+                            let won = last_task.participant_won;
+                            let opp_pun = last_task.opponent_punishment;
+
+                            let html = '';
+                            if (won) {
+                                html += `<h2>You won this trial!</h2>`;
+                                html += `<p>You earned 1 point.</p>`;
+                                html += `<p>${jsPsych.timelineVariable('opponent')} selected punishment level ${opp_pun} for you, but you won so you are not punished.</p>`;
+                            } else {
+                                html += `<h2>You lost this trial!</h2>`;
+                                html += `<p>${jsPsych.timelineVariable('opponent')} earned 1 point.</p>`;
+                                html += `<p>${jsPsych.timelineVariable('opponent')} selected punishment level ${opp_pun} for you.</p>`;
+                                html += `<p>You will now hear the sound.</p>`;
+                                playScratch(opp_pun);
+                            }
+                            return html;
+                        },
+                        choices: ['Continue']
+                    }
+                ],
+                conditional_function: function() {
+                    return !window.escaped_this_trial;
+                }
+            }
+        ],
+        timeline_variables: timeline_variables
+    };
+    timeline.push(trial_procedure);
+
+    // Post-task ratings
+    timeline.push({
+        type: jsPsychHtmlSliderResponse,
+        stimulus: `<h2>Rate Unpleasantness</h2><p>Please rate the perceived unpleasantness of the lowest level tone you just heard.</p>`,
+        labels: ['1 (Not unpleasant)', '8 (Extremely unpleasant)'],
+        min: 1, max: 8, step: 1, slider_start: 1,
+        on_load: function() { playScratch(1); },
+        on_finish: function(data) { data.tone_rating = 'lowest'; }
+    });
+
+    timeline.push({
+        type: jsPsychHtmlSliderResponse,
+        stimulus: `<h2>Rate Unpleasantness</h2><p>Please rate the perceived unpleasantness of the highest level tone you just heard.</p>`,
+        labels: ['1 (Not unpleasant)', '8 (Extremely unpleasant)'],
+        min: 1, max: 8, step: 1, slider_start: 8,
+        on_load: function() { playScratch(8); },
+        on_finish: function(data) { data.tone_rating = 'loudest'; }
+    });
+
+    // Final Score
     timeline.push({
         type: jsPsychHtmlButtonResponse,
-        stimulus: '<h1>Experiment Complete!</h1><p>Thank you for participating!</p>',
-        choices: [],
-        trial_duration: 3000,
-        on_finish: function(data) {
-            data.subject_id = subject_id;
-        }
+        stimulus: function() {
+            let html = `<h1>Game Over</h1>`;
+            html += `<p>Final Score:</p>`;
+            html += `<p>Frodo: ${frodo_score}</p>`;
+            html += `<p>Sauron & Saruman: ${opponents_score}</p>`;
+            if(frodo_score > opponents_score) {
+                html += `<h2>You won the game! Frodo kept the Ring!</h2>`;
+            } else if (frodo_score < opponents_score) {
+                html += `<h2>You lost the game! The opponents took the Ring!</h2>`;
+            } else {
+                html += `<h2>It's a tie!</h2>`;
+            }
+            return html;
+        },
+        choices: ['Finish']
     });
 
     // Save data using OSF DataPipe
     const save_data = {
         type: jsPsychPipe,
         action: "save",
-        experiment_id: "GsG4J26A4XuX",  // Replace with your OSF DataPipe experiment ID
+        experiment_id: "GsG4J26A4XuX",
         filename: filename,
         data_string: () => jsPsych.data.get().csv()
     };
-
     timeline.push(save_data);
 
     // Run the experiment

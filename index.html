@@ -117,7 +117,7 @@
     const action_instruction = is_touch_device ? "Tap the screen!" : "Press SPACE!";
 
     // Setup Game Logic
-    let opponent_roles = jsPsych.randomization.shuffle(['Sauron', 'Saruman']);
+    let opponent_roles = jsPsych.randomization.shuffle(['👾', '👽']);
     let provocative_opponent = opponent_roles[0];
     let non_provocative_opponent = opponent_roles[1];
 
@@ -177,8 +177,8 @@
     timeline.push({
         type: jsPsychInstructions,
         pages: [
-            '<h2>Fight-or-Escape Paradigm</h2><p>You have been assigned the character of <strong>Frodo</strong>.</p><p>Sauron and Saruman are sending out orcs to obtain the Ring of Power from you. You will compete against them.</p>',
-            '<p>In each trial, you will play against either Sauron or Saruman. The winner of each trial receives one point. Sauron and Saruman are teamed up, so their points are combined.</p><p>At the end of the game, the party with the highest score wins.</p>',
+            '<h2>Fight-or-Escape Paradigm</h2><p>You have been assigned the character of <strong>Frodo</strong>.</p><p>👾 and 👽 are sending out orcs to obtain the Ring of Power from you. You will compete against them.</p>',
+            '<p>In each trial, you will play against either 👾 or 👽. The winner of each trial receives one point. 👾 and 👽 are teamed up, so their points are combined.</p><p>At the end of the game, the party with the highest score wins.</p>',
             `<p>The winner of each trial is decided in a reaction time task. An exclamation mark (!) will appear, followed by a picture of an orc. You must ${action_text} as quickly as possible.</p><p>If you lose, you will be punished with an unpleasant sound.</p>`,
             '<p>Before the task, you will select a punishment level (1-8) for your opponent, in case you win.</p><p>Also, at the beginning of each trial, you have the option to put on the Ring and become invisible. If you do this, you escape the orc: nobody wins a point and nobody gets punished.</p>',
             `<p>You can use the Ring a maximum of <strong>10 times</strong>.</p><p>${next_text} to begin the game!</p>`
@@ -408,7 +408,7 @@
             let html = `<h1>Game Over</h1>`;
             html += `<p>Final Score:</p>`;
             html += `<p>Frodo: ${frodo_score}</p>`;
-            html += `<p>Sauron & Saruman: ${opponents_score}</p>`;
+            html += `<p>👾 & 👽: ${opponents_score}</p>`;
             if(frodo_score > opponents_score) {
                 html += `<h2>You won the game! Frodo kept the Ring!</h2>`;
             } else if (frodo_score < opponents_score) {

@@ -10,15 +10,173 @@
     <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.4.0"></script>
     <link href="https://unpkg.com/jspsych@7/css/jspsych.css" rel="stylesheet" type="text/css" />
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f0f0f0; }
-        .jspsych-content { max-width: 800px; margin: 50px auto; }
+        :root {
+            --bg-color: #98fb98; /* Friendly pastel grass green */
+        }
+        body { font-family: Arial, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; overflow: hidden; }
+        .jspsych-display-element { background-color: var(--bg-color); }
+        .jspsych-content-wrapper { background-color: var(--bg-color); }
+        .jspsych-content { max-width: 100%; width: 100vw; height: 100vh; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
         .stimulus-emoji { font-size: 100px; line-height: 1.2; }
+
+        /* Persistent Board Layout */
+        #game-board {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+            padding: 20px;
+            pointer-events: none; /* Let clicks pass through to jspsych center area if needed, we will re-enable on specific elements */
+        }
+
+        .board-top {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .opponent-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: opacity 0.3s;
+        }
+
+        .opponent-image {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #333;
+        }
+
+        .opponent-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-top: 10px;
+            text-shadow: 1px 1px 2px white;
+        }
+
+        .board-center {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto; /* Enable clicks in the center */
+        }
+
+        .board-bottom {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            width: 100%;
+            position: relative;
+            padding-bottom: 20px;
+        }
+
+        .player-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .player-avatar {
+            font-size: 80px;
+            line-height: 1;
+        }
+
+        .player-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-top: 5px;
+            text-shadow: 1px 1px 2px white;
+        }
+
+        .action-options {
+            position: absolute;
+            bottom: 120px;
+            display: flex;
+            gap: 50px;
+            justify-content: center;
+            pointer-events: auto;
+        }
+
+        .action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 2px solid #ccc;
+        }
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            border-color: #333;
+        }
+
+        .action-icon {
+            font-size: 60px;
+            width: 60px;
+            height: 60px;
+            line-height: 1;
+        }
+
+        .football-icon {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+
+        .action-label {
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .inactive-opponent {
+            opacity: 0.3;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .punishment-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .punishment-btn {
+            font-size: 2rem;
+            padding: 20px;
+            cursor: pointer;
+            border-radius: 10px;
+            background: white;
+            border: 2px solid #333;
+        }
+
         @media (max-width: 768px) {
             .jspsych-btn {
                 font-size: 1.5rem !important;
                 padding: 15px 30px !important;
                 margin: 10px !important;
             }
+            .opponent-image { width: 70px; height: 70px; }
+            .player-avatar { font-size: 60px; }
+            .action-icon { font-size: 50px; }
+            .football-icon { width: 50px; height: 50px; }
+            .action-options { gap: 20px; bottom: 100px; }
+            .punishment-btn { font-size: 1.5rem; padding: 15px; }
         }
     </style>
 </head>
@@ -37,36 +195,130 @@
     const filename = `${subject_id}.csv`;
     jsPsych.data.addProperties({subject_id: subject_id});
 
-    const timeline = [];
+
+    const possibleNames = ["Grommash", "Zul'jin", "Garrosh", "Gul'dan", "Thrall", "Malfurion", "Illidan", "Arthas"];
+    let posImages = [];
+    let negImages = [];
+
+    async function discoverImages() {
+        for (let i = 1; i <= 20; i++) {
+            try {
+                let resPos = await fetch('images/pos' + i + '.jpeg', { method: 'HEAD' });
+                if (resPos.ok) posImages.push('images/pos' + i + '.jpeg');
+            } catch(e) {}
+            try {
+                let resNeg = await fetch('images/neg' + i + '.jpeg', { method: 'HEAD' });
+                if (resNeg.ok) negImages.push('images/neg' + i + '.jpeg');
+            } catch(e) {}
+        }
+    }
+
+    discoverImages().then(() => {
+        if (posImages.length === 0) posImages.push('images/pos1.jpeg');
+        if (negImages.length === 0) negImages.push('images/neg1.jpeg');
+        let selectedPosImage = jsPsych.randomization.sampleWithoutReplacement(posImages, 1)[0];
+        let selectedNegImage = jsPsych.randomization.sampleWithoutReplacement(negImages, 1)[0];
+
+        let chosenNames = jsPsych.randomization.sampleWithoutReplacement(possibleNames, 2);
+
+        window.non_provocative_opponent = {
+            image: selectedPosImage,
+            name: chosenNames[0],
+            is_provocative: false
+        };
+        window.provocative_opponent = {
+            image: selectedNegImage,
+            name: chosenNames[1],
+            is_provocative: true
+        };
+
+        // Initialize timeline inside async callback
+        const timeline = [];
 
     // Audio context and generation
     let audioCtx;
     let baseTolerance = 0.5;
 
     function playScratch(level) {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
 
-        let duration = 1.5;
-        let osc = audioCtx.createOscillator();
-        let gainNode = audioCtx.createGain();
+            let duration = 1.5;
+            let osc = audioCtx.createOscillator();
+            let gainNode = audioCtx.createGain();
 
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800 + (level * 100), audioCtx.currentTime);
-        osc.frequency.linearRampToValueAtTime(1000 + (level * 100), audioCtx.currentTime + duration);
+            osc.type = 'sawtooth';
+            // Start lower for less harshness, but increase as level goes up.
+            osc.frequency.setValueAtTime(400 + (level * 80), audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(600 + (level * 80), audioCtx.currentTime + duration);
 
-        let volume = baseTolerance * (0.2 + 0.1 * level);
-        gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            let volume = baseTolerance * (0.1 + 0.05 * level);
+            // Ensure volume doesn't exceed 1.0 to prevent clipping
+            volume = Math.min(volume, 1.0);
 
-        osc.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
+            gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {
+            console.error("Audio playback failed: ", e);
+        }
     }
 
     // Device detection
     const is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
+
+    // Game Board Layout Helper
+    function getGameBoardHTML(centerHTML, activeOpponentName, isPosLeft, hideActions = false) {
+        let leftOpponent = isPosLeft ? window.non_provocative_opponent : window.provocative_opponent;
+        let rightOpponent = isPosLeft ? window.provocative_opponent : window.non_provocative_opponent;
+
+        let leftClass = (leftOpponent.name === activeOpponentName) ? '' : 'inactive-opponent';
+        let rightClass = (rightOpponent.name === activeOpponentName) ? '' : 'inactive-opponent';
+
+        let actionOptionsHTML = hideActions ? '' : `
+            <div class="action-options">
+                <div class="action-btn" id="btn-escape">
+                    <div class="action-icon">🚪</div>
+                    <div class="action-label">Escape (E)</div>
+                </div>
+                <div class="action-btn" id="btn-play">
+                    <img src="images/football.jpeg" class="football-icon">
+                    <div class="action-label">Play (P)</div>
+                </div>
+            </div>
+        `;
+
+        return `
+            <div id="game-board">
+                <div class="board-top">
+                    <div class="opponent-container ${leftClass}">
+                        <img src="${leftOpponent.image}" class="opponent-image">
+                        <div class="opponent-name">${leftOpponent.name}</div>
+                    </div>
+                    <div class="opponent-container ${rightClass}">
+                        <img src="${rightOpponent.image}" class="opponent-image">
+                        <div class="opponent-name">${rightOpponent.name}</div>
+                    </div>
+                </div>
+                <div class="board-center">
+                    ${centerHTML}
+                </div>
+                <div class="board-bottom">
+                    ${actionOptionsHTML}
+                    <div class="player-container">
+                        <div class="player-avatar">👤</div>
+                        <div class="player-name">Player</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
 
     // Initialize audio context on first interaction
     timeline.push({
@@ -117,9 +369,10 @@
     const action_instruction = is_touch_device ? "Tap the screen!" : "Press SPACE!";
 
     // Setup Game Logic
-    let opponent_roles = jsPsych.randomization.shuffle(['👾', '👽']);
-    let provocative_opponent = opponent_roles[0];
-    let non_provocative_opponent = opponent_roles[1];
+
+    let provocative_opponent = window.provocative_opponent;
+    let non_provocative_opponent = window.non_provocative_opponent;
+
 
     jsPsych.data.addProperties({
         provocative_opponent: provocative_opponent,
@@ -149,7 +402,8 @@
             opponent: opp,
             predefined_win: p_win,
             opponent_punishment: p_pun,
-            is_tutorial: true
+            is_tutorial: true,
+            is_pos_left: jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0]
         });
     }
 
@@ -168,7 +422,8 @@
             opponent: opp,
             predefined_win: p_win,
             opponent_punishment: p_pun,
-            is_tutorial: false
+            is_tutorial: false,
+            is_pos_left: jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0]
         });
     }
 
@@ -200,168 +455,212 @@
     });
 
     // Trial Loop
+
     let trial_timeline = [
-            {
-                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let total_rounds = jsPsych.timelineVariable('is_tutorial') ? 10 : 40;
-                    let round_type = jsPsych.timelineVariable('is_tutorial') ? 'Practice Round' : 'Round';
-                    let html = `<h2>${round_type} ${jsPsych.timelineVariable('trial_num')} / ${total_rounds}</h2><p>Your opponent is <strong>${jsPsych.timelineVariable('opponent')}</strong>.</p>`;
-                    if (!is_touch_device) html += '<p>Press SPACE to continue.</p>';
-                    return html;
-                },
-                choices: is_touch_device ? ['Continue'] : [' '],
-                on_finish: function() {
-                    window.escaped_this_trial = false;
-                }
+        // Step 1: Choose option (Play or Escape)
+        {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: function() {
+                let centerContent = `<h2>Choose your option</h2>`;
+                return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), false);
             },
-            {
-                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let html = `<p>You have used the ring ${ring_uses} out of 10 times.</p><p>Do you want to use the ring to escape the confrontation?</p>`;
-                    if (!is_touch_device) html += '<p>Press <strong>Y</strong> for Yes, or <strong>N</strong> for No.</p>';
-                    return html;
-                },
-                choices: is_touch_device ? ['Yes, use the ring', 'No, do not use the ring'] : ['y', 'n'],
-                on_finish: function(data) {
-                    data.escaped = false;
-                    data.ring_use_attempt = false;
-                    if (data.response === 0 || data.response === 'y') {
-                        data.ring_use_attempt = true;
-                        if (ring_uses < 10) {
-                            ring_uses++;
-                            window.escaped_this_trial = true;
-                            data.msg = "You escape the orc";
-                            data.escaped = true;
-                        } else {
-                            data.msg = "You cannot use the ring anymore";
-                        }
+            choices: ['e', 'p'],
+            on_load: function() {
+                // Setup touch listeners for mobile
+                document.getElementById('btn-escape').onclick = function() {
+                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
+                    jsPsych.finishTrial({response: 'e'});
+                };
+                document.getElementById('btn-play').onclick = function() {
+                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
+                    jsPsych.finishTrial({response: 'p'});
+                };
+            },
+            on_finish: function(data) {
+                if (data.response === 'e') {
+                    if (ring_uses < 10) {
+                        ring_uses++;
+                        window.escaped_this_trial = true;
+                        data.escaped = true;
+                        data.msg = "You escape the orc";
                     } else {
-                        data.msg = null;
+                        window.escaped_this_trial = false;
+                        data.escaped = false;
+                        data.msg = "You cannot use the ring anymore";
                     }
-                    data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
-                }
-            },
-            {
-                timeline: [{
-                    type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                    stimulus: function() {
-                        let last_data = jsPsych.data.get().last(1).values()[0];
-                        let html = `<h2>${last_data.msg}</h2>`;
-                        if (!is_touch_device) html += '<p>Press SPACE to continue.</p>';
-                        return html;
-                    },
-                    choices: is_touch_device ? ['Continue'] : [' ']
-                }],
-                conditional_function: function() {
-                    let last_data = jsPsych.data.get().last(1).values()[0];
-                    return last_data.msg !== null;
-                }
-            },
-            {
-                timeline: [
-                    {
-                        type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                        stimulus: function() {
-                            let html = `<p>Select a punishment level for ${jsPsych.timelineVariable('opponent')} in case you win.</p>`;
-                            if (!is_touch_device) html += '<p>Press a number key between <strong>1</strong> and <strong>8</strong>.</p>';
-                            return html;
-                        },
-                        choices: is_touch_device ? ['1', '2', '3', '4', '5', '6', '7', '8'] : ['1', '2', '3', '4', '5', '6', '7', '8'],
-                        on_finish: function(data) {
-                            if (is_touch_device) {
-                                data.participant_punishment = data.response + 1;
-                            } else {
-                                data.participant_punishment = parseInt(data.response);
-                            }
-                            data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
-                        }
-                    },
-                    {
-                        type: jsPsychHtmlKeyboardResponse,
-                        stimulus: '<div class="stimulus-emoji">!</div>',
-                        choices: "NO_KEYS",
-                        trial_duration: function() {
-                            return jsPsych.randomization.sampleWithoutReplacement([500, 750, 1000, 1250, 1500], 1)[0];
-                        }
-                    },
-                    {
-                        type: jsPsychHtmlKeyboardResponse,
-                        stimulus: `<div id="touch-target" style="width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;"><div class="stimulus-emoji">!</div><div class="stimulus-emoji">👹</div><p>${action_instruction}</p></div>`,
-                        choices: [' '],
-                        trial_duration: 2000,
-                        on_load: function() {
-                            const start_time = performance.now();
-                            const target = document.getElementById('touch-target');
-                            if (target) {
-                                const handleTouch = function(e) {
-                                    e.preventDefault();
-                                    const rt = performance.now() - start_time;
-                                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
-                                    jsPsych.finishTrial({rt: rt, response: 'touch'});
-                                };
-                                target.addEventListener('touchstart', handleTouch, {once: true});
-                                target.addEventListener('mousedown', handleTouch, {once: true});
-                            }
-                        },
-                        on_finish: function(data) {
-                            let rt = data.rt;
-                            let predefined_win = jsPsych.timelineVariable('predefined_win');
-                            let opponent_punishment = jsPsych.timelineVariable('opponent_punishment');
-
-                            let participant_won = false;
-                            if (rt !== null && rt <= 500) {
-                                participant_won = predefined_win;
-                            } else {
-                                participant_won = false;
-                            }
-
-                            if (!jsPsych.timelineVariable('is_tutorial')) {
-                                if (participant_won) {
-                                    frodo_score++;
-                                } else {
-                                    opponents_score++;
-                                }
-                            }
-
-                            data.participant_won = participant_won;
-                            data.opponent_punishment = opponent_punishment;
-                            data.is_tutorial = jsPsych.timelineVariable('is_tutorial');
-                            data.opponent = jsPsych.timelineVariable('opponent');
-                        }
-                    },
-                    {
-                        type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                        stimulus: function() {
-                            let last_task = jsPsych.data.get().filter({trial_type: 'html-keyboard-response'}).last(1).values()[0];
-                            let won = last_task.participant_won;
-                            let opp_pun = last_task.opponent_punishment;
-
-                            let html = '';
-                            if (won) {
-                                html += `<h2>You won this trial!</h2>`;
-                                html += `<p>You earned 1 point.</p>`;
-                                html += `<p>${jsPsych.timelineVariable('opponent')} selected punishment level ${opp_pun} for you, but you won so you are not punished.</p>`;
-                            } else {
-                                html += `<h2>You lost this trial!</h2>`;
-                                html += `<p>${jsPsych.timelineVariable('opponent')} earned 1 point.</p>`;
-                                html += `<p>${jsPsych.timelineVariable('opponent')} selected punishment level ${opp_pun} for you.</p>`;
-                                html += `<p>You will now hear the sound.</p>`;
-                                playScratch(opp_pun);
-                            }
-                            if (!is_touch_device) html += '<p>Press SPACE to continue.</p>';
-                            return html;
-                        },
-                        choices: is_touch_device ? ['Continue'] : [' ']
-                    }
-                ],
-                conditional_function: function() {
-                    return !window.escaped_this_trial;
+                } else {
+                    window.escaped_this_trial = false;
+                    data.escaped = false;
+                    data.msg = null;
                 }
             }
-        ];
+        },
+        // Step 1.5: If tried to escape but no uses left
+        {
+            timeline: [{
+                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let centerContent = `<h2>You cannot use the ring anymore. You must play!</h2>`;
+                    if (!is_touch_device) centerContent += '<p>Press SPACE to continue.</p>';
+                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: is_touch_device ? ['Continue'] : [' ']
+            }],
+            conditional_function: function() {
+                let last_data = jsPsych.data.get().last(1).values()[0];
+                return last_data.response === 'e' && !last_data.escaped;
+            }
+        },
+        // Step 2: Choose Punishment
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let centerContent = `<h2>Choose how hard you hit</h2>`;
+                    if (is_touch_device) {
+                        centerContent += `<div class="punishment-grid">`;
+                        for(let i=1; i<=8; i++) {
+                            centerContent += `<button class="punishment-btn" data-val="${i}">${i}</button>`;
+                        }
+                        centerContent += `</div>`;
+                    } else {
+                        centerContent += '<p>Press a number key between <strong>1</strong> and <strong>8</strong>.</p>';
+                    }
+                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: is_touch_device ? "NO_KEYS" : ['1', '2', '3', '4', '5', '6', '7', '8'],
+                on_load: function() {
+                    if (is_touch_device) {
+                        const btns = document.querySelectorAll('.punishment-btn');
+                        btns.forEach(btn => {
+                            btn.onclick = function() {
+                                let val = this.getAttribute('data-val');
+                                jsPsych.finishTrial({response: val});
+                            };
+                        });
+                    }
+                },
+                on_finish: function(data) {
+                    data.participant_punishment = parseInt(data.response);
+                }
+            }],
+            conditional_function: function() {
+                return !window.escaped_this_trial;
+            }
+        },
+        // Brief display of chosen strength
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let last_data = jsPsych.data.get().last(1).values()[0];
+                    let centerContent = `<h2>You chose hitting strength: ${last_data.participant_punishment}</h2>`;
+                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: "NO_KEYS",
+                trial_duration: 1000
+            }],
+            conditional_function: function() {
+                return !window.escaped_this_trial;
+            }
+        },
+        // Delay before target
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    return getGameBoardHTML("", jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: "NO_KEYS",
+                trial_duration: function() {
+                    return jsPsych.randomization.sampleWithoutReplacement([500, 750, 1000, 1250, 1500], 1)[0];
+                }
+            }],
+            conditional_function: function() {
+                return !window.escaped_this_trial;
+            }
+        },
+        // Step 3: Target (Reaction)
+        {
+            timeline: [{
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let targetHTML = `<div id="touch-target" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer;">
+                        <img src="images/football.jpeg" class="football-icon" style="width:150px; height:150px; margin-bottom: 20px;">
+                        <p>${action_instruction}</p>
+                    </div>`;
+                    return getGameBoardHTML(targetHTML, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: [' '],
+                trial_duration: 2000,
+                on_load: function() {
+                    const start_time = performance.now();
+                    const target = document.getElementById('touch-target');
+                    if (target) {
+                        const handleTouch = function(e) {
+                            e.preventDefault();
+                            const rt = performance.now() - start_time;
+                            jsPsych.pluginAPI.cancelAllKeyboardResponses();
+                            jsPsych.finishTrial({rt: rt, response: 'touch'});
+                        };
+                        target.addEventListener('touchstart', handleTouch, {once: true});
+                        target.addEventListener('mousedown', handleTouch, {once: true});
+                    }
+                },
+                on_finish: function(data) {
+                    let rt = data.rt;
+                    let predefined_win = jsPsych.timelineVariable('predefined_win');
+                    let opponent_punishment = jsPsych.timelineVariable('opponent_punishment');
 
-    let tutorial_procedure = {
+                    let participant_won = false;
+                    if (rt !== null && rt <= 500) {
+                        participant_won = predefined_win;
+                    }
+
+                    if (!jsPsych.timelineVariable('is_tutorial')) {
+                        if (participant_won) {
+                            frodo_score++;
+                        } else {
+                            opponents_score++;
+                        }
+                    }
+
+                    data.participant_won = participant_won;
+                    data.opponent_punishment = opponent_punishment;
+                }
+            }],
+            conditional_function: function() {
+                return !window.escaped_this_trial;
+            }
+        },
+        // Step 4: Result
+        {
+            timeline: [{
+                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let last_task = jsPsych.data.get().filter({trial_type: 'html-keyboard-response'}).last(1).values()[0];
+                    let won = last_task.participant_won;
+                    let opp_pun = last_task.opponent_punishment;
+                    let opp_name = jsPsych.timelineVariable('opponent').name;
+
+                    let centerContent = '';
+                    if (won) {
+                        centerContent += `<h2>You won! ${opp_name} chose punishment ${opp_pun}</h2>`;
+                    } else {
+                        centerContent += `<h2>You lost! You get hit with a strength of ${opp_pun}</h2>`;
+                        playScratch(opp_pun);
+                    }
+                    if (!is_touch_device) centerContent += '<p>Press SPACE to continue.</p>';
+                    return getGameBoardHTML(centerContent, opp_name, jsPsych.timelineVariable('is_pos_left'), true);
+                },
+                choices: is_touch_device ? ['Continue'] : [' ']
+            }],
+            conditional_function: function() {
+                return !window.escaped_this_trial;
+            }
+        }
+    ];
+let tutorial_procedure = {
         timeline: trial_timeline,
         timeline_variables: tutorial_timeline_variables
     };
@@ -434,6 +733,8 @@
 
     // Run the experiment
     jsPsych.run(timeline);
+    });
+
 </script>
 </body>
 </html>

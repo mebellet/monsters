@@ -90,6 +90,8 @@
                 resizeCanvas();
                 window.addEventListener('resize', resizeCanvas);
 
+                const DASH_VELOCITY_THRESHOLD = 0.5; // <-- Modify this value to easily adapt the pushing threshold
+
                 let score = 0;
                 let bot_offensiveness = 0.0;
                 let gameStartTime = performance.now();
@@ -98,9 +100,10 @@
                 let animationId;
                 let swipeData = [];
 
-                let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                let audioCtx = null;
 
                 function playTone(freq, type, duration, vol=1) {
+                    if (!audioCtx) return;
                     try {
                         if (audioCtx.state === 'suspended') audioCtx.resume();
                         let osc = audioCtx.createOscillator();
@@ -181,6 +184,9 @@
                 let impactPoint = null;
 
                 canvas.addEventListener('pointerdown', (e) => {
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
                     if (audioCtx.state === 'suspended') audioCtx.resume();
                     pointerDown = true;
                     startX = e.clientX;
@@ -211,7 +217,7 @@
                     const deltaX = currentX - startX;
                     const deltaY = currentY - startY;
 
-                    if (deltaY > 50 && player.homeY + deltaY > canvas.height * 0.9 && Math.abs(deltaX) < 50) {
+                    if (player.homeY + deltaY > canvas.height * 0.9) {
                         player.shielded = true;
                         player.x = player.homeX;
                         player.y = canvas.height * 0.95;
@@ -309,6 +315,10 @@
                         e.y += e.vy;
 
                         if (e.x - e.radius < 0 || e.x + e.radius > canvas.width) {
+                            if (e.type === 'crystal') {
+                                entities.splice(i, 1);
+                                continue;
+                            }
                             e.vx *= -1;
                             e.x = Math.max(e.radius, Math.min(canvas.width - e.radius, e.x));
                             if (e.type === 'hazard' && Math.abs(e.vx) > 3) {
@@ -325,7 +335,7 @@
                                 if (!impactPoint) impactPoint = [currentX, currentY];
 
                                 if (e.type === 'hazard') {
-                                    if (pointerDown && currentVelocity > 1.5) {
+                                    if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
                                         const dx = currentX - startX;
                                         const dy = currentY - startY;
                                         const mag = Math.hypot(dx, dy);
@@ -342,7 +352,7 @@
                                         continue;
                                     }
                                 } else if (e.type === 'crystal') {
-                                    if (pointerDown && currentVelocity > 1.5) {
+                                    if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
                                         const dx = currentX - startX;
                                         const dy = currentY - startY;
                                         const mag = Math.hypot(dx, dy);

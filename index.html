@@ -1,182 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fight-or-Escape Paradigm</title>
-    <script src="https://unpkg.com/jspsych@7"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1"></script>
-    <script src="https://unpkg.com/@jspsych/plugin-instructions@1"></script>
-    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.4.0"></script>
-    <link href="https://unpkg.com/jspsych@7/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <title>Continuous 2D Defense Game</title>
+    <script src="https://unpkg.com/jspsych@8"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@2"></script>
+    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.6.0"></script>
+    <link href="https://unpkg.com/jspsych@8/css/jspsych.css" rel="stylesheet" type="text/css" />
     <style>
         :root {
-            --bg-color: #98fb98; /* Friendly pastel grass green */
+            --bg-color: #1b263b;
         }
-        body { font-family: Arial, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; overflow: hidden; }
-        .jspsych-display-element { background-color: var(--bg-color); }
-        .jspsych-content-wrapper { background-color: var(--bg-color); }
-        .jspsych-content { max-width: 100%; width: 100vw; height: 100vh; margin: 0; padding: 0; display: flex; flex-direction: column; }
-
-        .stimulus-emoji { font-size: 100px; line-height: 1.2; }
-
-        /* Persistent Board Layout */
-        #game-board {
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #game-container {
             width: 100vw;
             height: 100vh;
-            position: absolute;
-            top: 0;
-            left: 0;
             display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            box-sizing: border-box;
-            padding: 20px;
-            pointer-events: none; /* Let clicks pass through to jspsych center area if needed, we will re-enable on specific elements */
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
         }
-
-        .board-top {
-            display: flex;
-            justify-content: space-between;
+        canvas {
+            background-color: var(--bg-color);
+            display: block;
             width: 100%;
-        }
-
-        .opponent-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            transition: opacity 0.3s;
-        }
-
-        .opponent-image {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #333;
-        }
-
-        .opponent-name {
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-top: 10px;
-            text-shadow: 1px 1px 2px white;
-        }
-
-        .board-center {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            pointer-events: auto; /* Enable clicks in the center */
-        }
-
-        .board-bottom {
-            display: flex;
-            justify-content: center;
-            align-items: flex-end;
-            width: 100%;
-            position: relative;
-            padding-bottom: 20px;
-        }
-
-        .player-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .player-avatar {
-            font-size: 80px;
-            line-height: 1;
-        }
-
-        .player-name {
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-top: 5px;
-            text-shadow: 1px 1px 2px white;
-        }
-
-        .action-options {
-            position: absolute;
-            bottom: 120px;
-            display: flex;
-            gap: 50px;
-            justify-content: center;
-            pointer-events: auto;
-        }
-
-        .action-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            cursor: pointer;
-            background: rgba(255, 255, 255, 0.7);
-            padding: 10px 20px;
-            border-radius: 15px;
-            border: 2px solid #ccc;
-        }
-        .action-btn:hover {
-            background: rgba(255, 255, 255, 1);
-            border-color: #333;
-        }
-
-        .action-icon {
-            font-size: 60px;
-            width: 60px;
-            height: 60px;
-            line-height: 1;
-        }
-
-        .football-icon {
-            width: 60px;
-            height: 60px;
-            object-fit: contain;
-        }
-
-        .action-label {
-            font-weight: bold;
-            margin-top: 5px;
-        }
-
-        .inactive-opponent {
-            opacity: 0.3;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        .punishment-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .punishment-btn {
-            font-size: 2rem;
-            padding: 20px;
-            cursor: pointer;
-            border-radius: 10px;
-            background: white;
-            border: 2px solid #333;
-        }
-
-        @media (max-width: 768px) {
-            .jspsych-btn {
-                font-size: 1.5rem !important;
-                padding: 15px 30px !important;
-                margin: 10px !important;
-            }
-            .opponent-image { width: 70px; height: 70px; }
-            .player-avatar { font-size: 60px; }
-            .action-icon { font-size: 50px; }
-            .football-icon { width: 50px; height: 50px; }
-            .action-options { gap: 20px; bottom: 100px; }
-            .punishment-btn { font-size: 1.5rem; padding: 15px; }
+            height: 100%;
+            touch-action: none;
         }
     </style>
 </head>
@@ -195,533 +52,482 @@
     const filename = `${subject_id}.csv`;
     jsPsych.data.addProperties({subject_id: subject_id});
 
-
-    const possibleNames = ["Grommash", "Zul'jin", "Garrosh", "Gul'dan", "Thrall", "Malfurion", "Illidan", "Arthas"];
-    let posImages = [];
-    let negImages = [];
-
-    async function discoverImages() {
-        for (let i = 1; i <= 20; i++) {
-            try {
-                let resPos = await fetch('images/pos' + i + '.jpeg', { method: 'HEAD' });
-                if (resPos.ok) posImages.push('images/pos' + i + '.jpeg');
-            } catch(e) {}
-            try {
-                let resNeg = await fetch('images/neg' + i + '.jpeg', { method: 'HEAD' });
-                if (resNeg.ok) negImages.push('images/neg' + i + '.jpeg');
-            } catch(e) {}
-        }
-    }
-
-    discoverImages().then(() => {
-        if (posImages.length === 0) posImages.push('images/pos1.jpeg');
-        if (negImages.length === 0) negImages.push('images/neg1.jpeg');
-        let selectedPosImage = jsPsych.randomization.sampleWithoutReplacement(posImages, 1)[0];
-        let selectedNegImage = jsPsych.randomization.sampleWithoutReplacement(negImages, 1)[0];
-
-        let chosenNames = jsPsych.randomization.sampleWithoutReplacement(possibleNames, 2);
-
-        window.non_provocative_opponent = {
-            image: selectedPosImage,
-            name: chosenNames[0],
-            is_provocative: false
-        };
-        window.provocative_opponent = {
-            image: selectedNegImage,
-            name: chosenNames[1],
-            is_provocative: true
-        };
-
-        // Initialize timeline inside async callback
-        const timeline = [];
-
-    // Audio context and generation
-    let audioCtx;
-    let baseTolerance = 0.5;
-
-    function playScratch(level) {
-        try {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
-            let duration = 1.5;
-            let osc = audioCtx.createOscillator();
-            let gainNode = audioCtx.createGain();
-
-            osc.type = 'sawtooth';
-            // Start lower for less harshness, but increase as level goes up.
-            osc.frequency.setValueAtTime(400 + (level * 80), audioCtx.currentTime);
-            osc.frequency.linearRampToValueAtTime(600 + (level * 80), audioCtx.currentTime + duration);
-
-            let volume = baseTolerance * (0.1 + 0.05 * level);
-            // Ensure volume doesn't exceed 1.0 to prevent clipping
-            volume = Math.min(volume, 1.0);
-
-            gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
-        } catch(e) {
-            console.error("Audio playback failed: ", e);
-        }
-    }
-
-    // Device detection
     const is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
+    const action_text = is_touch_device ? "swipe" : "drag";
 
-    // Game Board Layout Helper
-    function getGameBoardHTML(centerHTML, activeOpponentName, isPosLeft, hideActions = false) {
-        let leftOpponent = isPosLeft ? window.non_provocative_opponent : window.provocative_opponent;
-        let rightOpponent = isPosLeft ? window.provocative_opponent : window.non_provocative_opponent;
+    const jsPsychContinuousDefense = (function (jspsych) {
+        "use strict";
 
-        let leftClass = (leftOpponent.name === activeOpponentName) ? '' : 'inactive-opponent';
-        let rightClass = (rightOpponent.name === activeOpponentName) ? '' : 'inactive-opponent';
-
-        let actionOptionsHTML = hideActions ? '' : `
-            <div class="action-options">
-                <div class="action-btn" id="btn-escape">
-                    <div class="action-icon">🚪</div>
-                    <div class="action-label">Escape (E)</div>
-                </div>
-                <div class="action-btn" id="btn-play">
-                    <img src="images/football.jpeg" class="football-icon">
-                    <div class="action-label">Play (P)</div>
-                </div>
-            </div>
-        `;
-
-        return `
-            <div id="game-board">
-                <div class="board-top">
-                    <div class="opponent-container ${leftClass}">
-                        <img src="${leftOpponent.image}" class="opponent-image">
-                        <div class="opponent-name">${leftOpponent.name}</div>
-                    </div>
-                    <div class="opponent-container ${rightClass}">
-                        <img src="${rightOpponent.image}" class="opponent-image">
-                        <div class="opponent-name">${rightOpponent.name}</div>
-                    </div>
-                </div>
-                <div class="board-center">
-                    ${centerHTML}
-                </div>
-                <div class="board-bottom">
-                    ${actionOptionsHTML}
-                    <div class="player-container">
-                        <div class="player-avatar">👤</div>
-                        <div class="player-name">Player</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-
-    // Initialize audio context on first interaction
-    timeline.push({
-        type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-        stimulus: '<h1>Welcome</h1><p>This experiment involves audio. Please make sure your speakers/headphones are on.</p>' +
-                  (is_touch_device ? '' : '<p>Press SPACE to start.</p>'),
-        choices: is_touch_device ? ['Start'] : [' '],
-        on_finish: function() {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            audioCtx.resume();
-        }
-    });
-
-    // Volume Calibration
-    let test_volume_trial = {
-        type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-        stimulus: '<h1>Volume Calibration</h1>' +
-                  '<p>We need to find your maximum tolerance for the unpleasant noise used in this game.</p>' +
-                  (is_touch_device ?
-                    '<p>Tap the buttons below to hear the noise. Adjust it until it is the loudest unpleasant sound you can tolerate without pain.</p>' :
-                    '<p>Press <strong>P</strong> to Play Sound, <strong>D</strong> for Too Loud (Decrease), <strong>I</strong> for Too Soft (Increase), and <strong>X</strong> when Done.</p>'),
-        choices: is_touch_device ? ['Play Sound', 'Too Loud (Decrease)', 'Too Soft (Increase)', 'This is my maximum tolerance (Done)'] : ['p', 'd', 'i', 'x'],
-        on_finish: function(data) {
-            if(data.response === 0 || data.response === 'p') {
-                playScratch(8);
-            } else if (data.response === 1 || data.response === 'd') {
-                baseTolerance = Math.max(0.1, baseTolerance - 0.1);
-                playScratch(8);
-            } else if (data.response === 2 || data.response === 'i') {
-                baseTolerance = Math.min(1.0, baseTolerance + 0.1);
-                playScratch(8);
-            }
-        }
-    };
-
-    let calibration_loop = {
-        timeline: [test_volume_trial],
-        loop_function: function(data) {
-            if(data.values()[0].response === 3 || data.values()[0].response === 'x') {
-                return false;
-            } else {
-                return true;
-            }
-        }
-    };
-    timeline.push(calibration_loop);
-    const action_text = is_touch_device ? "tap the screen" : "press the SPACE bar";
-    const action_instruction = is_touch_device ? "Tap the screen!" : "Press SPACE!";
-
-    // Setup Game Logic
-
-    let provocative_opponent = window.provocative_opponent;
-    let non_provocative_opponent = window.non_provocative_opponent;
-
-
-    jsPsych.data.addProperties({
-        provocative_opponent: provocative_opponent,
-        non_provocative_opponent: non_provocative_opponent
-    });
-
-    let prov_punishments = jsPsych.randomization.shuffle([4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7,8,8,8,8]);
-    let non_prov_punishments = jsPsych.randomization.shuffle([1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4]);
-    let prov_wins = jsPsych.randomization.shuffle([true,true,true,true,true,true,true,true,true,true,false,false,false,false,false,false,false,false,false,false]);
-    let non_prov_wins = jsPsych.randomization.shuffle([true,true,true,true,true,true,true,true,true,true,false,false,false,false,false,false,false,false,false,false]);
-
-    let trial_opponents = [];
-    for(let i=0; i<20; i++) {
-        trial_opponents.push(provocative_opponent);
-        trial_opponents.push(non_provocative_opponent);
-    }
-    trial_opponents = jsPsych.randomization.shuffle(trial_opponents);
-
-    let tutorial_timeline_variables = [];
-    for(let i=0; i<10; i++) {
-        let opp = jsPsych.randomization.sampleWithoutReplacement([provocative_opponent, non_provocative_opponent], 1)[0];
-        let p_win = jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0];
-        let p_pun = jsPsych.randomization.sampleWithoutReplacement([1,2,3,4,5,6,7,8], 1)[0];
-
-        tutorial_timeline_variables.push({
-            trial_num: i + 1,
-            opponent: opp,
-            predefined_win: p_win,
-            opponent_punishment: p_pun,
-            is_tutorial: true,
-            is_pos_left: jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0]
-        });
-    }
-
-    let timeline_variables = [];
-    let p_win_idx = 0, p_pun_idx = 0;
-    let np_win_idx = 0, np_pun_idx = 0;
-
-    for(let i=0; i<40; i++) {
-        let opp = trial_opponents[i];
-        let is_prov = (opp === provocative_opponent);
-        let p_win = is_prov ? prov_wins[p_win_idx++] : non_prov_wins[np_win_idx++];
-        let p_pun = is_prov ? prov_punishments[p_pun_idx++] : non_prov_punishments[np_pun_idx++];
-
-        timeline_variables.push({
-            trial_num: i + 1,
-            opponent: opp,
-            predefined_win: p_win,
-            opponent_punishment: p_pun,
-            is_tutorial: false,
-            is_pos_left: jsPsych.randomization.sampleWithoutReplacement([true, false], 1)[0]
-        });
-    }
-
-    // Instructions
-    let next_text = is_touch_device ? "Click Next" : "Press the Right Arrow key";
-    timeline.push({
-        type: jsPsychInstructions,
-        pages: [
-            '<h2>Fight-or-Escape Paradigm</h2><p>You have been assigned the character of <strong>Frodo</strong>.</p><p>👾 and 👽 are sending out orcs to obtain the Ring of Power from you. You will compete against them.</p>',
-            '<p>In each trial, you will play against either 👾 or 👽. The winner of each trial receives one point. 👾 and 👽 are teamed up, so their points are combined.</p><p>At the end of the game, the party with the highest score wins.</p>',
-            `<p>The winner of each trial is decided in a reaction time task. An exclamation mark (!) will appear, followed by a picture of an orc. You must ${action_text} as quickly as possible.</p><p>If you lose, you will be punished with an unpleasant sound.</p>`,
-            '<p>Before the task, you will select a punishment level (1-8) for your opponent, in case you win.</p><p>Also, at the beginning of each trial, you have the option to put on the Ring and become invisible. If you do this, you escape the orc: nobody wins a point and nobody gets punished.</p>',
-            `<p>You can use the Ring a maximum of <strong>10 times</strong>.</p><p>${next_text} to begin the game!</p>`
-        ],
-        show_clickable_nav: is_touch_device
-    });
-
-    let ring_uses = 0;
-    let frodo_score = 0;
-    let opponents_score = 0;
-
-    // Tutorial Instructions
-    timeline.push({
-        type: jsPsychInstructions,
-        pages: [
-            `<h2>Tutorial</h2><p>Before the real game starts, you will play 10 practice rounds.</p><p>These rounds will not count towards your final score.</p><p>${next_text} to begin the tutorial!</p>`
-        ],
-        show_clickable_nav: is_touch_device
-    });
-
-    // Trial Loop
-
-    let trial_timeline = [
-        // Step 1: Choose option (Play or Escape)
-        {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: function() {
-                let centerContent = `<h2>Choose your option</h2>`;
-                return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), false);
-            },
-            choices: ['e', 'p'],
-            on_load: function() {
-                // Setup touch listeners for mobile
-                document.getElementById('btn-escape').onclick = function() {
-                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
-                    jsPsych.finishTrial({response: 'e'});
-                };
-                document.getElementById('btn-play').onclick = function() {
-                    jsPsych.pluginAPI.cancelAllKeyboardResponses();
-                    jsPsych.finishTrial({response: 'p'});
-                };
-            },
-            on_finish: function(data) {
-                if (data.response === 'e') {
-                    if (ring_uses < 10) {
-                        ring_uses++;
-                        window.escaped_this_trial = true;
-                        data.escaped = true;
-                        data.msg = "You escape the orc";
-                    } else {
-                        window.escaped_this_trial = false;
-                        data.escaped = false;
-                        data.msg = "You cannot use the ring anymore";
-                    }
-                } else {
-                    window.escaped_this_trial = false;
-                    data.escaped = false;
-                    data.msg = null;
+        const info = {
+            name: "continuous-defense",
+            parameters: {
+                duration: {
+                    type: jspsych.ParameterType.INT,
+                    default: 180000,
+                    description: "Duration of the game in ms."
                 }
             }
-        },
-        // Step 1.5: If tried to escape but no uses left
-        {
-            timeline: [{
-                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let centerContent = `<h2>You cannot use the ring anymore. You must play!</h2>`;
-                    if (!is_touch_device) centerContent += '<p>Press SPACE to continue.</p>';
-                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: is_touch_device ? ['Continue'] : [' ']
-            }],
-            conditional_function: function() {
-                let last_data = jsPsych.data.get().last(1).values()[0];
-                return last_data.response === 'e' && !last_data.escaped;
+        };
+
+        class Plugin {
+            constructor(jsPsych) {
+                this.jsPsych = jsPsych;
             }
-        },
-        // Step 2: Choose Punishment
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let centerContent = `<h2>Choose how hard you hit</h2>`;
-                    if (is_touch_device) {
-                        centerContent += `<div class="punishment-grid">`;
-                        for(let i=1; i<=8; i++) {
-                            centerContent += `<button class="punishment-btn" data-val="${i}">${i}</button>`;
-                        }
-                        centerContent += `</div>`;
-                    } else {
-                        centerContent += '<p>Press a number key between <strong>1</strong> and <strong>8</strong>.</p>';
+
+            trial(display_element, trial) {
+                display_element.innerHTML = `
+                    <div id="game-container">
+                        <canvas id="gameCanvas"></canvas>
+                    </div>
+                `;
+                const canvas = document.getElementById('gameCanvas');
+                const ctx = canvas.getContext('2d');
+
+                function resizeCanvas() {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                }
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+
+                let score = 0;
+                let bot_offensiveness = 0.0;
+                let gameStartTime = performance.now();
+                let lastFrameTime = gameStartTime;
+                let isGameOver = false;
+                let animationId;
+                let swipeData = [];
+
+                let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                function playTone(freq, type, duration, vol=1) {
+                    try {
+                        if (audioCtx.state === 'suspended') audioCtx.resume();
+                        let osc = audioCtx.createOscillator();
+                        let gain = audioCtx.createGain();
+                        osc.type = type;
+                        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + duration);
+                    } catch(e) { console.error("Audio error", e); }
+                }
+
+                function playPositiveChime() {
+                    playTone(600, 'sine', 0.1, 0.5);
+                    setTimeout(() => playTone(800, 'sine', 0.2, 0.5), 100);
+                }
+                function playAversiveCrunch() {
+                    playTone(100, 'sawtooth', 0.3, 0.8);
+                }
+                function playAversiveShock() {
+                    playTone(150, 'square', 0.4, 0.8);
+                }
+                function playSharpAlert() {
+                    playTone(400, 'triangle', 0.2, 0.9);
+                }
+
+                const player = {
+                    homeX: canvas.width / 2,
+                    homeY: canvas.height * 0.85,
+                    x: canvas.width / 2,
+                    y: canvas.height * 0.85,
+                    radius: 20,
+                    shielded: false,
+                    stunTimer: 0,
+                    color: '#00ffcc'
+                };
+
+                const bot = {
+                    homeX: canvas.width / 2,
+                    homeY: canvas.height * 0.15,
+                    x: canvas.width / 2,
+                    y: canvas.height * 0.15,
+                    radius: 20,
+                    flashTimer: 0,
+                    color: '#ffcc00'
+                };
+
+                let entities = [];
+                let particles = [];
+                let spawnTimer = 0;
+
+                function spawnEntity() {
+                    const isHazard = Math.random() < 0.7;
+                    const dir = Math.random() < 0.5 ? 1 : -1;
+                    entities.push({
+                        type: isHazard ? 'hazard' : 'crystal',
+                        x: canvas.width / 2 + (Math.random() * 40 - 20),
+                        y: canvas.height / 2,
+                        vx: (Math.random() * 2 - 1),
+                        vy: dir * (Math.random() * 1.5 + 1),
+                        radius: 15,
+                        active: true
+                    });
+                }
+
+                let pointerDown = false;
+                let startX = 0;
+                let startY = 0;
+                let currentX = 0;
+                let currentY = 0;
+                let pointerTime = 0;
+                let maxVelocity = 0;
+                let impactPoint = null;
+
+                canvas.addEventListener('pointerdown', (e) => {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    pointerDown = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    currentX = startX;
+                    currentY = startY;
+                    pointerTime = performance.now();
+                    maxVelocity = 0;
+                    impactPoint = null;
+                });
+
+                canvas.addEventListener('pointermove', (e) => {
+                    if (!pointerDown) return;
+                    const now = performance.now();
+                    const dt = now - pointerTime;
+                    if (dt > 0) {
+                        const dx = e.clientX - currentX;
+                        const dy = e.clientY - currentY;
+                        const vel = Math.sqrt(dx*dx + dy*dy) / dt;
+                        if (vel > maxVelocity) maxVelocity = vel;
                     }
-                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: is_touch_device ? "NO_KEYS" : ['1', '2', '3', '4', '5', '6', '7', '8'],
-                on_load: function() {
-                    if (is_touch_device) {
-                        const btns = document.querySelectorAll('.punishment-btn');
-                        btns.forEach(btn => {
-                            btn.onclick = function() {
-                                let val = this.getAttribute('data-val');
-                                jsPsych.finishTrial({response: val});
-                            };
+                    currentX = e.clientX;
+                    currentY = e.clientY;
+                    pointerTime = now;
+
+                    const deltaX = currentX - startX;
+                    const deltaY = currentY - startY;
+
+                    if (deltaY > 50 && player.homeY + deltaY > canvas.height * 0.9 && Math.abs(deltaX) < 50) {
+                        player.shielded = true;
+                        player.x = player.homeX;
+                        player.y = canvas.height * 0.95;
+                    } else {
+                        player.shielded = false;
+                        player.x = player.homeX + deltaX * 1.5;
+                        player.y = player.homeY + deltaY * 1.5;
+                        player.x = Math.max(0, Math.min(canvas.width, player.x));
+                        player.y = Math.max(0, Math.min(canvas.height, player.y));
+                    }
+                });
+
+                canvas.addEventListener('pointerup', (e) => {
+                    if (!pointerDown) return;
+                    pointerDown = false;
+                    const releaseX = e.clientX;
+                    const releaseY = e.clientY;
+
+                    let swipe_angle = null;
+                    if (impactPoint) {
+                        const dx = releaseX - impactPoint[0];
+                        const dy = impactPoint[1] - releaseY;
+                        swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    }
+
+                    const hazards_on_screen = entities.filter(ent => ent.type === 'hazard').length;
+
+                    swipeData.push({
+                        timestamp: performance.now() - gameStartTime,
+                        swipe_angle: swipe_angle,
+                        peak_velocity: maxVelocity,
+                        current_bot_offensiveness: bot_offensiveness,
+                        hazards_on_screen: hazards_on_screen,
+                        current_score: score
+                    });
+
+                    impactPoint = null;
+                });
+
+                function createParticles(x, y, color) {
+                    for (let i = 0; i < 15; i++) {
+                        particles.push({
+                            x: x, y: y,
+                            vx: (Math.random() - 0.5) * 10,
+                            vy: (Math.random() - 0.5) * 10,
+                            life: 300 + Math.random() * 300,
+                            color: color
                         });
                     }
-                },
-                on_finish: function(data) {
-                    data.participant_punishment = parseInt(data.response);
                 }
-            }],
-            conditional_function: function() {
-                return !window.escaped_this_trial;
-            }
-        },
-        // Brief display of chosen strength
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let last_data = jsPsych.data.get().last(1).values()[0];
-                    let centerContent = `<h2>You chose hitting strength: ${last_data.participant_punishment}</h2>`;
-                    return getGameBoardHTML(centerContent, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: "NO_KEYS",
-                trial_duration: 1000
-            }],
-            conditional_function: function() {
-                return !window.escaped_this_trial;
-            }
-        },
-        // Delay before target
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    return getGameBoardHTML("", jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: "NO_KEYS",
-                trial_duration: function() {
-                    return jsPsych.randomization.sampleWithoutReplacement([500, 750, 1000, 1250, 1500], 1)[0];
-                }
-            }],
-            conditional_function: function() {
-                return !window.escaped_this_trial;
-            }
-        },
-        // Step 3: Target (Reaction)
-        {
-            timeline: [{
-                type: jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let targetHTML = `<div id="touch-target" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer;">
-                        <img src="images/football.jpeg" class="football-icon" style="width:150px; height:150px; margin-bottom: 20px;">
-                        <p>${action_instruction}</p>
-                    </div>`;
-                    return getGameBoardHTML(targetHTML, jsPsych.timelineVariable('opponent').name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: [' '],
-                trial_duration: 2000,
-                on_load: function() {
-                    const start_time = performance.now();
-                    const target = document.getElementById('touch-target');
-                    if (target) {
-                        const handleTouch = function(e) {
-                            e.preventDefault();
-                            const rt = performance.now() - start_time;
-                            jsPsych.pluginAPI.cancelAllKeyboardResponses();
-                            jsPsych.finishTrial({rt: rt, response: 'touch'});
-                        };
-                        target.addEventListener('touchstart', handleTouch, {once: true});
-                        target.addEventListener('mousedown', handleTouch, {once: true});
-                    }
-                },
-                on_finish: function(data) {
-                    let rt = data.rt;
-                    let predefined_win = jsPsych.timelineVariable('predefined_win');
-                    let opponent_punishment = jsPsych.timelineVariable('opponent_punishment');
 
-                    let participant_won = false;
-                    if (rt !== null && rt <= 500) {
-                        participant_won = predefined_win;
+                function update(dt) {
+                    if (isGameOver) return;
+                    const timeElapsed = performance.now() - gameStartTime;
+
+                    bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
+
+                    if (!pointerDown) {
+                        player.x += (player.homeX - player.x) * 0.1;
+                        player.y += (player.homeY - player.y) * 0.1;
+                        player.shielded = false;
                     }
 
-                    if (!jsPsych.timelineVariable('is_tutorial')) {
-                        if (participant_won) {
-                            frodo_score++;
-                        } else {
-                            opponents_score++;
+                    if (player.stunTimer > 0) player.stunTimer -= dt;
+                    if (bot.flashTimer > 0) bot.flashTimer -= dt;
+
+                    let nearestDist = Infinity;
+                    let targetX = bot.homeX;
+                    for (let e of entities) {
+                        if (e.y < canvas.height / 2 && e.vy < 0) {
+                            let d = Math.abs(e.y - bot.y);
+                            if (d < nearestDist) {
+                                nearestDist = d;
+                                targetX = e.x;
+                            }
+                        }
+                    }
+                    bot.x += (targetX - bot.x) * 0.05;
+
+                    spawnTimer -= dt;
+                    if (spawnTimer <= 0) {
+                        spawnEntity();
+                        spawnTimer = 800 + Math.random() * 1000;
+                    }
+
+                    for (let i = entities.length - 1; i >= 0; i--) {
+                        let e = entities[i];
+                        e.x += e.vx;
+                        e.y += e.vy;
+
+                        if (e.x - e.radius < 0 || e.x + e.radius > canvas.width) {
+                            e.vx *= -1;
+                            e.x = Math.max(e.radius, Math.min(canvas.width - e.radius, e.x));
+                            if (e.type === 'hazard' && Math.abs(e.vx) > 3) {
+                                score += 10;
+                                createParticles(e.x, e.y, '#ff8c00');
+                                entities.splice(i, 1);
+                                continue;
+                            }
+                        }
+
+                        const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
+                        if (distToPlayer < e.radius + player.radius && e.active) {
+                            if (!player.shielded && player.stunTimer <= 0) {
+                                if (!impactPoint) impactPoint = [currentX, currentY];
+
+                                if (e.type === 'hazard') {
+                                    if (pointerDown && maxVelocity > 0.5) {
+                                        const dx = currentX - startX;
+                                        const dy = currentY - startY;
+                                        const mag = Math.hypot(dx, dy);
+                                        if (mag > 0) {
+                                            e.vx = (dx / mag) * 10;
+                                            e.vy = (dy / mag) * 10;
+                                        }
+                                    } else {
+                                        score -= 50;
+                                        playAversiveShock();
+                                        player.stunTimer = 1000;
+                                        createParticles(player.x, player.y, '#ff0000');
+                                        entities.splice(i, 1);
+                                        continue;
+                                    }
+                                } else if (e.type === 'crystal') {
+                                    if (pointerDown && maxVelocity > 0.5) {
+                                        const dx = currentX - startX;
+                                        const dy = currentY - startY;
+                                        const mag = Math.hypot(dx, dy);
+                                        if (mag > 0) {
+                                            e.vx = (dx / mag) * 8;
+                                            e.vy = (dy / mag) * 8;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const distToBot = Math.hypot(e.x - bot.x, e.y - bot.y);
+                        if (distToBot < e.radius + bot.radius && e.active) {
+                            if (e.type === 'hazard') {
+                                if (Math.random() < bot_offensiveness) {
+                                    e.vx = (Math.random() - 0.5) * 5;
+                                    e.vy = 8;
+                                } else {
+                                    e.vx = (bot.x > canvas.width/2 ? -10 : 10);
+                                    e.vy = 0;
+                                }
+                            }
+                        }
+
+                        if (e.y > canvas.height * 0.9) {
+                            if (e.type === 'hazard') {
+                                score -= 20;
+                                playAversiveCrunch();
+                                createParticles(e.x, e.y, '#aaaaaa');
+                            } else if (e.type === 'crystal') {
+                                score += 50;
+                                playPositiveChime();
+                                createParticles(e.x, e.y, '#00ffff');
+                            }
+                            entities.splice(i, 1);
+                            continue;
+                        }
+
+                        if (e.y < canvas.height * 0.1) {
+                            if (e.type === 'hazard') {
+                                score -= 20;
+                                playSharpAlert();
+                                bot.flashTimer = 500;
+                                createParticles(e.x, e.y, '#ffff00');
+                            }
+                            entities.splice(i, 1);
+                            continue;
                         }
                     }
 
-                    data.participant_won = participant_won;
-                    data.opponent_punishment = opponent_punishment;
-                }
-            }],
-            conditional_function: function() {
-                return !window.escaped_this_trial;
-            }
-        },
-        // Step 4: Result
-        {
-            timeline: [{
-                type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
-                stimulus: function() {
-                    let last_task = jsPsych.data.get().filter({trial_type: 'html-keyboard-response'}).last(1).values()[0];
-                    let won = last_task.participant_won;
-                    let opp_pun = last_task.opponent_punishment;
-                    let opp_name = jsPsych.timelineVariable('opponent').name;
-
-                    let centerContent = '';
-                    if (won) {
-                        centerContent += `<h2>You won! ${opp_name} chose punishment ${opp_pun}</h2>`;
-                    } else {
-                        centerContent += `<h2>You lost! You get hit with a strength of ${opp_pun}</h2>`;
-                        playScratch(opp_pun);
+                    for (let i = particles.length - 1; i >= 0; i--) {
+                        let p = particles[i];
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.life -= dt;
+                        if (p.life <= 0) particles.splice(i, 1);
                     }
-                    if (!is_touch_device) centerContent += '<p>Press SPACE to continue.</p>';
-                    return getGameBoardHTML(centerContent, opp_name, jsPsych.timelineVariable('is_pos_left'), true);
-                },
-                choices: is_touch_device ? ['Continue'] : [' ']
-            }],
-            conditional_function: function() {
-                return !window.escaped_this_trial;
+                }
+
+                function draw() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    ctx.fillStyle = '#440000';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.1);
+                    ctx.fillStyle = '#000044';
+                    ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1);
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '24px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
+
+                    ctx.save();
+                    ctx.translate(bot.x, bot.y);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, bot.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = bot.flashTimer > 0 ? (Math.random() > 0.5 ? '#ffff00' : '#ff0000') : bot.color;
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(-8, -5, 4, 4);
+                    ctx.fillRect(4, -5, 4, 4);
+                    ctx.restore();
+
+                    ctx.save();
+                    ctx.globalAlpha = player.shielded ? 0.4 : 1.0;
+                    ctx.translate(player.x, player.y);
+                    ctx.beginPath();
+                    ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
+                    ctx.moveTo(0, -player.radius);
+                    ctx.lineTo(player.radius, player.radius);
+                    ctx.lineTo(-player.radius, player.radius);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = player.color;
+                    ctx.restore();
+
+                    for (let e of entities) {
+                        ctx.save();
+                        ctx.translate(e.x, e.y);
+                        if (e.type === 'hazard') {
+                            ctx.fillStyle = '#ff8c00';
+                            ctx.beginPath();
+                            ctx.moveTo(0, -e.radius);
+                            ctx.lineTo(e.radius, -e.radius/2);
+                            ctx.lineTo(e.radius*0.8, e.radius);
+                            ctx.lineTo(-e.radius*0.8, e.radius);
+                            ctx.lineTo(-e.radius, -e.radius/2);
+                            ctx.closePath();
+                            ctx.fill();
+                        } else {
+                            ctx.fillStyle = '#00ffff';
+                            ctx.shadowBlur = 10;
+                            ctx.shadowColor = '#ff00ff';
+                            ctx.beginPath();
+                            ctx.moveTo(0, -e.radius);
+                            ctx.lineTo(e.radius/2, 0);
+                            ctx.lineTo(0, e.radius);
+                            ctx.lineTo(-e.radius/2, 0);
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+                        ctx.restore();
+                    }
+
+                    for (let p of particles) {
+                        ctx.globalAlpha = p.life / 600;
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1.0;
+                }
+
+                function loop(time) {
+                    if (isGameOver) return;
+                    const dt = time - lastFrameTime;
+                    lastFrameTime = time;
+
+                    update(dt);
+                    draw();
+
+                    if (time - gameStartTime >= trial.duration) {
+                        isGameOver = true;
+                        endTrial();
+                    } else {
+                        animationId = requestAnimationFrame(loop);
+                    }
+                }
+
+                function endTrial() {
+                    window.removeEventListener('resize', resizeCanvas);
+                    const trial_data = {
+                        swipes_data: JSON.stringify(swipeData),
+                        final_score: score
+                    };
+                    display_element.innerHTML = '';
+                    jsPsych.finishTrial(trial_data);
+                }
+
+                requestAnimationFrame(loop);
             }
         }
-    ];
-let tutorial_procedure = {
-        timeline: trial_timeline,
-        timeline_variables: tutorial_timeline_variables
-    };
-    timeline.push(tutorial_procedure);
+        Plugin.info = info;
+        return Plugin;
+    })(jsPsychModule);
 
-    // Main Game Instructions
+    const timeline = [];
+
     timeline.push({
         type: jsPsychInstructions,
         pages: [
-            `<h2>Tutorial Complete</h2><p>You have finished the practice rounds.</p><p>The real game is about to begin. These rounds will count towards your score.</p><p>${next_text} to begin!</p>`
+            '<h2>Defense Game</h2><p>Welcome! In this game, you defend your base (bottom blue area) and attack the opponent (top red area).</p>',
+            '<p>Hazards (orange rocks) will fall. ' + action_text + ' across the screen to dash and deflect them.</p><p>Energy Boosts (cyan crystals) will also fall. Guide them into your base for points.</p>',
+            '<p>Drag straight down into your base to hide (shield mode).</p><p>Click next to start!</p>'
         ],
-        show_clickable_nav: is_touch_device
-    });
-
-    let main_trial_procedure = {
-        timeline: trial_timeline,
-        timeline_variables: timeline_variables
-    };
-    timeline.push(main_trial_procedure);
-
-    // Post-task ratings
-    timeline.push({
-        type: jsPsychHtmlSliderResponse,
-        stimulus: `<h2>Rate Unpleasantness</h2><p>Please rate the perceived unpleasantness of the lowest level tone you just heard.</p>`,
-        labels: ['1 (Not unpleasant)', '8 (Extremely unpleasant)'],
-        min: 1, max: 8, step: 1, slider_start: 1,
-        on_load: function() { playScratch(1); },
-        on_finish: function(data) { data.tone_rating = 'lowest'; }
+        show_clickable_nav: true
     });
 
     timeline.push({
-        type: jsPsychHtmlSliderResponse,
-        stimulus: `<h2>Rate Unpleasantness</h2><p>Please rate the perceived unpleasantness of the highest level tone you just heard.</p>`,
-        labels: ['1 (Not unpleasant)', '8 (Extremely unpleasant)'],
-        min: 1, max: 8, step: 1, slider_start: 8,
-        on_load: function() { playScratch(8); },
-        on_finish: function(data) { data.tone_rating = 'loudest'; }
+        type: jsPsychContinuousDefense,
+        duration: 180000
     });
 
-    // Final Score
     timeline.push({
-        type: is_touch_device ? jsPsychHtmlButtonResponse : jsPsychHtmlKeyboardResponse,
+        type: jsPsychHtmlButtonResponse,
         stimulus: function() {
-            let html = `<h1>Game Over</h1>`;
-            html += `<p>Final Score:</p>`;
-            html += `<p>Frodo: ${frodo_score}</p>`;
-            html += `<p>👾 & 👽: ${opponents_score}</p>`;
-            if(frodo_score > opponents_score) {
-                html += `<h2>You won the game! Frodo kept the Ring!</h2>`;
-            } else if (frodo_score < opponents_score) {
-                html += `<h2>You lost the game! The opponents took the Ring!</h2>`;
-            } else {
-                html += `<h2>It's a tie!</h2>`;
-            }
-            if (!is_touch_device) html += '<p>Press SPACE to finish.</p>';
-            return html;
+            let last_trial_data = jsPsych.data.get().last(1).values()[0];
+            return `<h1>Game Over</h1><p>Final Score: ${last_trial_data.final_score || 0}</p>`;
         },
-        choices: is_touch_device ? ['Finish'] : [' ']
+        choices: ['Finish']
     });
 
-    // Save data using OSF DataPipe
     const save_data = {
         type: jsPsychPipe,
         action: "save",
@@ -731,10 +537,7 @@ let tutorial_procedure = {
     };
     timeline.push(save_data);
 
-    // Run the experiment
     jsPsych.run(timeline);
-    });
-
 </script>
 </body>
 </html>

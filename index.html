@@ -135,7 +135,7 @@
                     homeY: canvas.height * 0.85,
                     x: canvas.width / 2,
                     y: canvas.height * 0.85,
-                    radius: 20,
+                    radius: 40,
                     shielded: false,
                     stunTimer: 0,
                     color: '#00ffcc'
@@ -146,7 +146,7 @@
                     homeY: canvas.height * 0.15,
                     x: canvas.width / 2,
                     y: canvas.height * 0.15,
-                    radius: 20,
+                    radius: 40,
                     flashTimer: 0,
                     color: '#ffcc00'
                 };
@@ -156,15 +156,16 @@
                 let spawnTimer = 0;
 
                 function spawnEntity() {
-                    const isHazard = Math.random() < 0.7;
+                    const isHazard = Math.random() < 0.85;
                     const dir = Math.random() < 0.5 ? 1 : -1;
+                    const speedMult = isHazard ? 2.0 : 1.0;
                     entities.push({
                         type: isHazard ? 'hazard' : 'crystal',
                         x: canvas.width / 2 + (Math.random() * 40 - 20),
                         y: canvas.height / 2,
-                        vx: (Math.random() * 2 - 1),
-                        vy: dir * (Math.random() * 1.5 + 1),
-                        radius: 15,
+                        vx: (Math.random() * 2 - 1) * speedMult,
+                        vy: dir * (Math.random() * 1.5 + 1) * speedMult,
+                        radius: 30,
                         active: true
                     });
                 }
@@ -176,6 +177,7 @@
                 let currentY = 0;
                 let pointerTime = 0;
                 let maxVelocity = 0;
+                let currentVelocity = 0;
                 let impactPoint = null;
 
                 canvas.addEventListener('pointerdown', (e) => {
@@ -187,6 +189,7 @@
                     currentY = startY;
                     pointerTime = performance.now();
                     maxVelocity = 0;
+                    currentVelocity = 0;
                     impactPoint = null;
                 });
 
@@ -199,6 +202,7 @@
                         const dy = e.clientY - currentY;
                         const vel = Math.sqrt(dx*dx + dy*dy) / dt;
                         if (vel > maxVelocity) maxVelocity = vel;
+                        currentVelocity = vel;
                     }
                     currentX = e.clientX;
                     currentY = e.clientY;
@@ -263,6 +267,8 @@
                     if (isGameOver) return;
                     const timeElapsed = performance.now() - gameStartTime;
 
+                    if (performance.now() - pointerTime > 100) currentVelocity = 0;
+
                     bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
 
                     if (!pointerDown) {
@@ -276,21 +282,25 @@
 
                     let nearestDist = Infinity;
                     let targetX = bot.homeX;
+                    let targetY = bot.homeY;
                     for (let e of entities) {
                         if (e.y < canvas.height / 2 && e.vy < 0) {
                             let d = Math.abs(e.y - bot.y);
                             if (d < nearestDist) {
                                 nearestDist = d;
                                 targetX = e.x;
+                                targetY = e.y;
                             }
                         }
                     }
                     bot.x += (targetX - bot.x) * 0.05;
+                    bot.y += (targetY - bot.y) * 0.05;
+                    bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
 
                     spawnTimer -= dt;
                     if (spawnTimer <= 0) {
                         spawnEntity();
-                        spawnTimer = 800 + Math.random() * 1000;
+                        spawnTimer = 400 + Math.random() * 600;
                     }
 
                     for (let i = entities.length - 1; i >= 0; i--) {
@@ -315,7 +325,7 @@
                                 if (!impactPoint) impactPoint = [currentX, currentY];
 
                                 if (e.type === 'hazard') {
-                                    if (pointerDown && maxVelocity > 0.5) {
+                                    if (pointerDown && currentVelocity > 1.5) {
                                         const dx = currentX - startX;
                                         const dy = currentY - startY;
                                         const mag = Math.hypot(dx, dy);
@@ -332,13 +342,14 @@
                                         continue;
                                     }
                                 } else if (e.type === 'crystal') {
-                                    if (pointerDown && maxVelocity > 0.5) {
+                                    if (pointerDown && currentVelocity > 1.5) {
                                         const dx = currentX - startX;
                                         const dy = currentY - startY;
                                         const mag = Math.hypot(dx, dy);
                                         if (mag > 0) {
                                             e.vx = (dx / mag) * 8;
-                                            e.vy = (dy / mag) * 8;
+                                            let new_vy = (dy / mag) * 8;
+                                            e.vy = new_vy < 0 ? 0 : new_vy;
                                         }
                                     }
                                 }
@@ -523,7 +534,7 @@
         type: jsPsychHtmlButtonResponse,
         stimulus: function() {
             let last_trial_data = jsPsych.data.get().last(1).values()[0];
-            return `<h1>Game Over</h1><p>Final Score: ${last_trial_data.final_score || 0}</p>`;
+            return `<h1>Game Over</h1><p style="font-size: 60px; font-weight: bold;">Final Score: ${last_trial_data.final_score || 0}</p>`;
         },
         choices: ['Finish']
     });

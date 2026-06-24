@@ -479,12 +479,6 @@
                         ctx.textAlign = 'right';
                         ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
 
-                        if (lastSwipeAngle !== null && (performance.now() - lastSwipeTime) < 3000) {
-                            ctx.fillStyle = '#ffffff';
-                            ctx.font = '20px Arial';
-                            ctx.textAlign = 'left';
-                            ctx.fillText(`Last Swipe: ${lastSwipeAngle}°`, 20, canvas.height / 2);
-                        }
 
                         ctx.save();
                         ctx.translate(bot.x, bot.y);
@@ -494,4 +488,129 @@
                         ctx.fill();
                         ctx.fillStyle = '#000';
                         ctx.fillRect(-8, -5, 4, 4);
-                        ctx.fillRect
+                        ctx.fillRect(4, -5, 4, 4);
+                        ctx.restore();
+
+                        ctx.save();
+                        ctx.globalAlpha = player.shielded ? 0.4 : 1.0;
+                        ctx.translate(player.x, player.y);
+                        ctx.beginPath();
+                        ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
+                        ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = player.color;
+                        ctx.restore();
+
+                        for (let e of entities) {
+                            ctx.save();
+                            ctx.translate(e.x, e.y);
+                            if (e.type === 'hazard') {
+                                ctx.fillStyle = e.color;
+                                ctx.beginPath();
+                                ctx.moveTo(0, -e.radius);
+                                ctx.lineTo(e.radius, -e.radius / 2);
+                                ctx.lineTo(e.radius * 0.8, e.radius);
+                                ctx.lineTo(-e.radius * 0.8, e.radius);
+                                ctx.lineTo(-e.radius, -e.radius / 2);
+                                ctx.closePath();
+                                ctx.fill();
+                            } else {
+                                ctx.fillStyle = e.color;
+                                ctx.shadowBlur = 10;
+                                ctx.shadowColor = e.color;
+                                ctx.beginPath();
+                                ctx.moveTo(0, -e.radius);
+                                ctx.lineTo(e.radius / 2, 0);
+                                ctx.lineTo(0, e.radius);
+                                ctx.lineTo(-e.radius / 2, 0);
+                                ctx.closePath();
+                                ctx.fill();
+                            }
+                            ctx.restore();
+                        }
+
+                        for (let p of particles) {
+                            ctx.globalAlpha = p.life / 600;
+                            ctx.fillStyle = p.color;
+                            ctx.beginPath();
+                            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        ctx.globalAlpha = 1.0;
+                    }
+
+                    function loop(time) {
+                        if (isGameOver) return;
+                        const dt = time - lastFrameTime;
+                        lastFrameTime = time;
+
+                        update(dt);
+                        draw();
+
+                        if (time - gameStartTime >= trial.duration) {
+                            isGameOver = true;
+                            endTrial();
+                        } else {
+                            animationId = requestAnimationFrame(loop);
+                        }
+                    }
+
+                    function endTrial() {
+                        window.removeEventListener('resize', resizeCanvas);
+                        const trial_data = {
+                            swipes_data: JSON.stringify(swipeData),
+                            final_score: score
+                        };
+                        display_element.innerHTML = '';
+                        jsPsych.finishTrial(trial_data);
+                    }
+
+                    requestAnimationFrame(loop);
+                }
+            }
+            Plugin.info = info;
+            return Plugin;
+        })(jsPsychModule);
+
+        const timeline = [];
+
+        timeline.push({
+            type: jsPsychInstructions,
+            pages: [
+                '<h2>Defense Game</h2><p>Welcome! In this game, you defend your base (bottom blue area) and attack the opponent (top red area).</p>',
+                '<p>Hazards (orange/red rocks) will fall. ' + action_text + ' across the screen to dash and deflect them.</p><p>Energy Boosts (cyan crystals) will also fall. Guide them into your base for points.</p>',
+                '<p>Drag straight down into your base to hide (shield mode).</p><p>Click next to start!</p>'
+            ],
+            show_clickable_nav: true
+        });
+
+        timeline.push({
+            type: jsPsychContinuousDefense,
+            duration: 120000
+        });
+
+        timeline.push({
+            type: jsPsychHtmlButtonResponse,
+            stimulus: function () {
+                let last_trial_data = jsPsych.data.get().last(1).values()[0];
+                return `<h1>Game Over</h1><p style="font-size: 60px; font-weight: bold;">Final Score: ${last_trial_data.final_score || 0}</p>`;
+            },
+            choices: ['Finish']
+        });
+
+        const save_data = {
+            type: jsPsychPipe,
+            action: "save",
+            experiment_id: "GsG4J26A4XuX",
+            filename: filename,
+            data_string: () => jsPsych.data.get().csv()
+        };
+        timeline.push(save_data);
+
+        jsPsych.run(timeline);
+    </script>
+</body>
+
+</html>

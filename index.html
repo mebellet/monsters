@@ -342,10 +342,13 @@
 
                                     if (e.type === 'hazard') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            const dx = currentX - startX;
-                                            const dy = currentY - startY;
+                                            // PHYSICS FIX: Calculate angle from impact point, not start point
+                                            const dx = currentX - impactPoint[0];
+                                            const dy = currentY - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
-                                            if (mag > 0) {
+
+                                            // Wait for the finger to travel 5 pixels past impact to get a clean, stable vector
+                                            if (mag > 5) {
                                                 e.vx = (dx / mag) * 10;
                                                 e.vy = (dy / mag) * 10;
                                             }
@@ -359,13 +362,15 @@
                                         }
                                     } else if (e.type === 'crystal') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            const dx = currentX - startX;
-                                            const dy = currentY - startY;
+                                            // PHYSICS FIX: Calculate angle from impact point
+                                            const dx = currentX - impactPoint[0];
+                                            const dy = currentY - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
-                                            if (mag > 0) {
+
+                                            if (mag > 5) {
                                                 e.vx = (dx / mag) * 8;
                                                 let new_vy = (dy / mag) * 8;
-                                                e.vy = new_vy < 0 ? 0 : new_vy;
+                                                e.vy = new_vy < 0 ? 0 : new_vy; // Crystals only go down
                                             }
                                         }
                                     }

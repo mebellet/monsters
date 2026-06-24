@@ -165,15 +165,26 @@
                     let spawnTimer = 0;
 
                     function spawnEntity() {
-                        const isHazard = Math.random() < 0.85;
+                        const isHazard = Math.random() < 0.70;
                         const dir = Math.random() < 0.5 ? 1 : -1;
                         const speedMult = isHazard ? 2.0 : 1.0;
+
+                        let startVx, startVy;
+                        if (isHazard) {
+                            startVx = (Math.random() * 4 - 2); // Hazards move left/right between -2 and 2
+                            startVy = dir * (Math.random() * 3 + 2); // Hazards move up/down between 2 and 5
+                        } else {
+                            // CRYSTAL VELOCITY SETTINGS:
+                            startVx = (Math.random() * 2 - 1); // Crystals drift left/right slowly (-1 to 1)
+                            startVy = dir * (Math.random() * 1.5 + 1); // Crystals drift up/down slowly (1 to 2.5)
+                        }
+
                         entities.push({
                             type: isHazard ? 'hazard' : 'crystal',
                             x: canvas.width / 2 + (Math.random() * 40 - 20),
                             y: canvas.height / 2,
-                            vx: (Math.random() * 2 - 1) * speedMult,
-                            vy: dir * (Math.random() * 1.5 + 1) * speedMult,
+                            vx: startVx,
+                            vy: startVy,
                             radius: 30,
                             active: true,
                             playerDeflected: false
@@ -324,7 +335,7 @@
                         spawnTimer -= dt;
                         if (spawnTimer <= 0) {
                             spawnEntity();
-                            spawnTimer = 400 + Math.random() * 600;
+                            spawnTimer = 200 + Math.random() * 400;
                         }
 
                         for (let i = entities.length - 1; i >= 0; i--) {
@@ -398,6 +409,22 @@
                             const distToBot = Math.hypot(e.x - bot.x, e.y - bot.y);
                             if (distToBot < e.radius + bot.radius && e.active) {
                                 if (e.type === 'hazard') {
+
+                                    // NEW: Check if the player threw this hazard at the bot
+                                    if (e.playerDeflected) {
+                                        // 80% chance the bot takes the hit and fails to backfire
+                                        if (Math.random() < 0.80) {
+                                            score += 100; // Reward the player for a direct hit!
+                                            bot.flashTimer = 500; // Make the bot flash
+                                            playPositiveChime(); // Play a rewarding sound
+                                            createParticles(bot.x, bot.y, '#ff0000'); // Red explosion at bot
+                                            entities.splice(i, 1); // Destroy the hazard so it doesn't get stuck
+                                            continue; // Move to the next entity
+                                        }
+                                    }
+
+                                    // The bot's counter-attack logic (happens if it wasn't deflected by the player, 
+                                    // or if it successfully "parried" the 20% chance above)
                                     if (Math.random() < bot_offensiveness) {
                                         e.vx = (Math.random() - 0.5) * 5;
                                         e.vy = 8;
@@ -405,6 +432,7 @@
                                         e.vx = (bot.x > canvas.width / 2 ? -10 : 10);
                                         e.vy = 0;
                                     }
+                                    // Reset so if the bot hits it down, it can hurt the player again
                                     e.playerDeflected = false;
                                 }
                             }

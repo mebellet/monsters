@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Continuous 2D Defense Game</title>
     <script src="https://unpkg.com/jspsych@8"></script>
@@ -12,14 +13,17 @@
         :root {
             --bg-color: #1b263b;
         }
-        body, html {
+
+        body,
+        html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #000;
+            background-color: #eeb2b2;
         }
+
         #game-container {
             width: 100vw;
             height: 100vh;
@@ -28,6 +32,7 @@
             align-items: center;
             background-color: #000;
         }
+
         canvas {
             background-color: var(--bg-color);
             display: block;
@@ -37,528 +42,530 @@
         }
     </style>
 </head>
+
 <body>
-<div id="jspsych-target"></div>
+    <div id="jspsych-target"></div>
 
-<script>
-    const jsPsych = initJsPsych({
-        display_element: 'jspsych-target',
-        on_finish: function() {
-            console.log("Experiment completed!");
-        }
-    });
+    <script>
+        const jsPsych = initJsPsych({
+            display_element: 'jspsych-target',
+            on_finish: function () {
+                console.log("Experiment completed!");
+            }
+        });
 
-    const subject_id = jsPsych.randomization.randomID(10);
-    const filename = `${subject_id}.csv`;
-    jsPsych.data.addProperties({subject_id: subject_id});
+        const subject_id = jsPsych.randomization.randomID(10);
+        const filename = `${subject_id}.csv`;
+        jsPsych.data.addProperties({ subject_id: subject_id });
 
-    const is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
-    const action_text = is_touch_device ? "swipe" : "drag";
+        const is_touch_device = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0);
+        const action_text = is_touch_device ? "swipe" : "drag";
 
-    const jsPsychContinuousDefense = (function (jspsych) {
-        "use strict";
+        const jsPsychContinuousDefense = (function (jspsych) {
+            "use strict";
 
-        const info = {
-            name: "continuous-defense",
-            parameters: {
-                duration: {
-                    type: jspsych.ParameterType.INT,
-                    default: 180000,
-                    description: "Duration of the game in ms."
+            const info = {
+                name: "continuous-defense",
+                parameters: {
+                    duration: {
+                        type: jspsych.ParameterType.INT,
+                        default: 180000,
+                        description: "Duration of the game in ms."
+                    }
                 }
-            }
-        };
+            };
 
-        class Plugin {
-            constructor(jsPsych) {
-                this.jsPsych = jsPsych;
-            }
+            class Plugin {
+                constructor(jsPsych) {
+                    this.jsPsych = jsPsych;
+                }
 
-            trial(display_element, trial) {
-                display_element.innerHTML = `
+                trial(display_element, trial) {
+                    display_element.innerHTML = `
                     <div id="game-container">
                         <canvas id="gameCanvas"></canvas>
                     </div>
                 `;
-                const canvas = document.getElementById('gameCanvas');
-                const ctx = canvas.getContext('2d');
+                    const canvas = document.getElementById('gameCanvas');
+                    const ctx = canvas.getContext('2d');
 
-                function resizeCanvas() {
-                    canvas.width = window.innerWidth;
-                    canvas.height = window.innerHeight;
-                }
-                resizeCanvas();
-                window.addEventListener('resize', resizeCanvas);
-
-                const DASH_VELOCITY_THRESHOLD = 0.5; // <-- Modify this value to easily adapt the pushing threshold
-
-                let score = 0;
-                let bot_offensiveness = 0.0;
-                let gameStartTime = performance.now();
-                let lastFrameTime = gameStartTime;
-                let isGameOver = false;
-                let animationId;
-                let swipeData = [];
-
-                let audioCtx = null;
-
-                function playTone(freq, type, duration, vol=1) {
-                    if (!audioCtx) return;
-                    try {
-                        if (audioCtx.state === 'suspended') audioCtx.resume();
-                        let osc = audioCtx.createOscillator();
-                        let gain = audioCtx.createGain();
-                        osc.type = type;
-                        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-                        osc.connect(gain);
-                        gain.connect(audioCtx.destination);
-                        osc.start();
-                        osc.stop(audioCtx.currentTime + duration);
-                    } catch(e) { console.error("Audio error", e); }
-                }
-
-                function playPositiveChime() {
-                    playTone(600, 'sine', 0.1, 0.5);
-                    setTimeout(() => playTone(800, 'sine', 0.2, 0.5), 100);
-                }
-                function playAversiveCrunch() {
-                    playTone(100, 'sawtooth', 0.3, 0.8);
-                }
-                function playAversiveShock() {
-                    playTone(150, 'square', 0.4, 0.8);
-                }
-                function playSharpAlert() {
-                    playTone(400, 'triangle', 0.2, 0.9);
-                }
-
-                const player = {
-                    homeX: canvas.width / 2,
-                    homeY: canvas.height * 0.85,
-                    x: canvas.width / 2,
-                    y: canvas.height * 0.85,
-                    radius: 40,
-                    shielded: false,
-                    stunTimer: 0,
-                    color: '#00ffcc'
-                };
-
-                const bot = {
-                    homeX: canvas.width / 2,
-                    homeY: canvas.height * 0.15,
-                    x: canvas.width / 2,
-                    y: canvas.height * 0.15,
-                    radius: 40,
-                    flashTimer: 0,
-                    color: '#ffcc00'
-                };
-
-                let entities = [];
-                let particles = [];
-                let spawnTimer = 0;
-
-                function spawnEntity() {
-                    const isHazard = Math.random() < 0.85;
-                    const dir = Math.random() < 0.5 ? 1 : -1;
-                    const speedMult = isHazard ? 2.0 : 1.0;
-                    entities.push({
-                        type: isHazard ? 'hazard' : 'crystal',
-                        x: canvas.width / 2 + (Math.random() * 40 - 20),
-                        y: canvas.height / 2,
-                        vx: (Math.random() * 2 - 1) * speedMult,
-                        vy: dir * (Math.random() * 1.5 + 1) * speedMult,
-                        radius: 30,
-                        active: true
-                    });
-                }
-
-                let pointerDown = false;
-                let startX = 0;
-                let startY = 0;
-                let currentX = 0;
-                let currentY = 0;
-                let pointerTime = 0;
-                let maxVelocity = 0;
-                let currentVelocity = 0;
-                let impactPoint = null;
-
-                canvas.addEventListener('pointerdown', (e) => {
-                    if (!audioCtx) {
-                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    function resizeCanvas() {
+                        canvas.width = window.innerWidth;
+                        canvas.height = window.innerHeight;
                     }
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
-                    pointerDown = true;
-                    startX = e.clientX;
-                    startY = e.clientY;
-                    currentX = startX;
-                    currentY = startY;
-                    pointerTime = performance.now();
-                    maxVelocity = 0;
-                    currentVelocity = 0;
-                    impactPoint = null;
-                });
+                    resizeCanvas();
+                    window.addEventListener('resize', resizeCanvas);
 
-                canvas.addEventListener('pointermove', (e) => {
-                    if (!pointerDown) return;
-                    const now = performance.now();
-                    const dt = now - pointerTime;
-                    if (dt > 0) {
-                        const dx = e.clientX - currentX;
-                        const dy = e.clientY - currentY;
-                        const vel = Math.sqrt(dx*dx + dy*dy) / dt;
-                        if (vel > maxVelocity) maxVelocity = vel;
-                        currentVelocity = vel;
-                    }
-                    currentX = e.clientX;
-                    currentY = e.clientY;
-                    pointerTime = now;
+                    const DASH_VELOCITY_THRESHOLD = 0.5; // <-- Modify this value to easily adapt the pushing threshold
 
-                    const deltaX = currentX - startX;
-                    const deltaY = currentY - startY;
+                    let score = 0;
+                    let bot_offensiveness = 0.0;
+                    let gameStartTime = performance.now();
+                    let lastFrameTime = gameStartTime;
+                    let isGameOver = false;
+                    let animationId;
+                    let swipeData = [];
 
-                    if (player.homeY + deltaY > canvas.height * 0.9) {
-                        player.shielded = true;
-                        player.x = player.homeX;
-                        player.y = canvas.height * 0.95;
-                    } else {
-                        player.shielded = false;
-                        player.x = player.homeX + deltaX * 1.5;
-                        player.y = player.homeY + deltaY * 1.5;
-                        player.x = Math.max(0, Math.min(canvas.width, player.x));
-                        player.y = Math.max(0, Math.min(canvas.height, player.y));
-                    }
-                });
+                    let audioCtx = null;
 
-                canvas.addEventListener('pointerup', (e) => {
-                    if (!pointerDown) return;
-                    pointerDown = false;
-                    const releaseX = e.clientX;
-                    const releaseY = e.clientY;
-
-                    let swipe_angle = null;
-                    if (impactPoint) {
-                        const dx = releaseX - impactPoint[0];
-                        const dy = impactPoint[1] - releaseY;
-                        swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    function playTone(freq, type, duration, vol = 1) {
+                        if (!audioCtx) return;
+                        try {
+                            if (audioCtx.state === 'suspended') audioCtx.resume();
+                            let osc = audioCtx.createOscillator();
+                            let gain = audioCtx.createGain();
+                            osc.type = type;
+                            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                            osc.connect(gain);
+                            gain.connect(audioCtx.destination);
+                            osc.start();
+                            osc.stop(audioCtx.currentTime + duration);
+                        } catch (e) { console.error("Audio error", e); }
                     }
 
-                    const hazards_on_screen = entities.filter(ent => ent.type === 'hazard').length;
+                    function playPositiveChime() {
+                        playTone(600, 'sine', 0.1, 0.5);
+                        setTimeout(() => playTone(800, 'sine', 0.2, 0.5), 100);
+                    }
+                    function playAversiveCrunch() {
+                        playTone(100, 'sawtooth', 0.3, 0.8);
+                    }
+                    function playAversiveShock() {
+                        playTone(150, 'square', 0.4, 0.8);
+                    }
+                    function playSharpAlert() {
+                        playTone(400, 'triangle', 0.2, 0.9);
+                    }
 
-                    swipeData.push({
-                        timestamp: performance.now() - gameStartTime,
-                        swipe_angle: swipe_angle,
-                        peak_velocity: maxVelocity,
-                        current_bot_offensiveness: bot_offensiveness,
-                        hazards_on_screen: hazards_on_screen,
-                        current_score: score
-                    });
+                    const player = {
+                        homeX: canvas.width / 2,
+                        homeY: canvas.height * 0.85,
+                        x: canvas.width / 2,
+                        y: canvas.height * 0.85,
+                        radius: 40,
+                        shielded: false,
+                        stunTimer: 0,
+                        color: '#00ffcc'
+                    };
 
-                    impactPoint = null;
-                });
+                    const bot = {
+                        homeX: canvas.width / 2,
+                        homeY: canvas.height * 0.15,
+                        x: canvas.width / 2,
+                        y: canvas.height * 0.15,
+                        radius: 40,
+                        flashTimer: 0,
+                        color: '#ffcc00'
+                    };
 
-                function createParticles(x, y, color) {
-                    for (let i = 0; i < 15; i++) {
-                        particles.push({
-                            x: x, y: y,
-                            vx: (Math.random() - 0.5) * 10,
-                            vy: (Math.random() - 0.5) * 10,
-                            life: 300 + Math.random() * 300,
-                            color: color
+                    let entities = [];
+                    let particles = [];
+                    let spawnTimer = 0;
+
+                    function spawnEntity() {
+                        const isHazard = Math.random() < 0.85;
+                        const dir = Math.random() < 0.5 ? 1 : -1;
+                        const speedMult = isHazard ? 2.0 : 1.0;
+                        entities.push({
+                            type: isHazard ? 'hazard' : 'crystal',
+                            x: canvas.width / 2 + (Math.random() * 40 - 20),
+                            y: canvas.height / 2,
+                            vx: (Math.random() * 2 - 1) * speedMult,
+                            vy: dir * (Math.random() * 1.5 + 1) * speedMult,
+                            radius: 30,
+                            active: true
                         });
                     }
-                }
 
-                function update(dt) {
-                    if (isGameOver) return;
-                    const timeElapsed = performance.now() - gameStartTime;
+                    let pointerDown = false;
+                    let startX = 0;
+                    let startY = 0;
+                    let currentX = 0;
+                    let currentY = 0;
+                    let pointerTime = 0;
+                    let maxVelocity = 0;
+                    let currentVelocity = 0;
+                    let impactPoint = null;
 
-                    if (performance.now() - pointerTime > 100) currentVelocity = 0;
-
-                    bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
-
-                    if (!pointerDown) {
-                        player.x += (player.homeX - player.x) * 0.1;
-                        player.y += (player.homeY - player.y) * 0.1;
-                        player.shielded = false;
-                    }
-
-                    if (player.stunTimer > 0) player.stunTimer -= dt;
-                    if (bot.flashTimer > 0) bot.flashTimer -= dt;
-
-                    let nearestDist = Infinity;
-                    let targetX = bot.homeX;
-                    let targetY = bot.homeY;
-                    for (let e of entities) {
-                        if (e.y < canvas.height / 2 && e.vy < 0) {
-                            let d = Math.abs(e.y - bot.y);
-                            if (d < nearestDist) {
-                                nearestDist = d;
-                                targetX = e.x;
-                                targetY = e.y;
-                            }
+                    canvas.addEventListener('pointerdown', (e) => {
+                        if (!audioCtx) {
+                            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                         }
-                    }
-                    bot.x += (targetX - bot.x) * 0.05;
-                    bot.y += (targetY - bot.y) * 0.05;
-                    bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
+                        if (audioCtx.state === 'suspended') audioCtx.resume();
+                        pointerDown = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        currentX = startX;
+                        currentY = startY;
+                        pointerTime = performance.now();
+                        maxVelocity = 0;
+                        currentVelocity = 0;
+                        impactPoint = null;
+                    });
 
-                    spawnTimer -= dt;
-                    if (spawnTimer <= 0) {
-                        spawnEntity();
-                        spawnTimer = 400 + Math.random() * 600;
-                    }
-
-                    for (let i = entities.length - 1; i >= 0; i--) {
-                        let e = entities[i];
-                        e.x += e.vx;
-                        e.y += e.vy;
-
-                        if (e.x - e.radius < 0 || e.x + e.radius > canvas.width) {
-                            if (e.type === 'crystal') {
-                                entities.splice(i, 1);
-                                continue;
-                            }
-                            e.vx *= -1;
-                            e.x = Math.max(e.radius, Math.min(canvas.width - e.radius, e.x));
-                            if (e.type === 'hazard' && Math.abs(e.vx) > 3) {
-                                score += 10;
-                                createParticles(e.x, e.y, '#ff8c00');
-                                entities.splice(i, 1);
-                                continue;
-                            }
+                    canvas.addEventListener('pointermove', (e) => {
+                        if (!pointerDown) return;
+                        const now = performance.now();
+                        const dt = now - pointerTime;
+                        if (dt > 0) {
+                            const dx = e.clientX - currentX;
+                            const dy = e.clientY - currentY;
+                            const vel = Math.sqrt(dx * dx + dy * dy) / dt;
+                            if (vel > maxVelocity) maxVelocity = vel;
+                            currentVelocity = vel;
                         }
+                        currentX = e.clientX;
+                        currentY = e.clientY;
+                        pointerTime = now;
 
-                        const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
-                        if (distToPlayer < e.radius + player.radius && e.active) {
-                            if (!player.shielded && player.stunTimer <= 0) {
-                                if (!impactPoint) impactPoint = [currentX, currentY];
+                        const deltaX = currentX - startX;
+                        const deltaY = currentY - startY;
 
-                                if (e.type === 'hazard') {
-                                    if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                        const dx = currentX - startX;
-                                        const dy = currentY - startY;
-                                        const mag = Math.hypot(dx, dy);
-                                        if (mag > 0) {
-                                            e.vx = (dx / mag) * 10;
-                                            e.vy = (dy / mag) * 10;
-                                        }
-                                    } else {
-                                        score -= 50;
-                                        playAversiveShock();
-                                        player.stunTimer = 1000;
-                                        createParticles(player.x, player.y, '#ff0000');
-                                        entities.splice(i, 1);
-                                        continue;
-                                    }
-                                } else if (e.type === 'crystal') {
-                                    if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                        const dx = currentX - startX;
-                                        const dy = currentY - startY;
-                                        const mag = Math.hypot(dx, dy);
-                                        if (mag > 0) {
-                                            e.vx = (dx / mag) * 8;
-                                            let new_vy = (dy / mag) * 8;
-                                            e.vy = new_vy < 0 ? 0 : new_vy;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        const distToBot = Math.hypot(e.x - bot.x, e.y - bot.y);
-                        if (distToBot < e.radius + bot.radius && e.active) {
-                            if (e.type === 'hazard') {
-                                if (Math.random() < bot_offensiveness) {
-                                    e.vx = (Math.random() - 0.5) * 5;
-                                    e.vy = 8;
-                                } else {
-                                    e.vx = (bot.x > canvas.width/2 ? -10 : 10);
-                                    e.vy = 0;
-                                }
-                            }
-                        }
-
-                        if (e.y > canvas.height * 0.9) {
-                            if (e.type === 'hazard') {
-                                score -= 20;
-                                playAversiveCrunch();
-                                createParticles(e.x, e.y, '#aaaaaa');
-                            } else if (e.type === 'crystal') {
-                                score += 50;
-                                playPositiveChime();
-                                createParticles(e.x, e.y, '#00ffff');
-                            }
-                            entities.splice(i, 1);
-                            continue;
-                        }
-
-                        if (e.y < canvas.height * 0.1) {
-                            if (e.type === 'hazard') {
-                                score -= 20;
-                                playSharpAlert();
-                                bot.flashTimer = 500;
-                                createParticles(e.x, e.y, '#ffff00');
-                            }
-                            entities.splice(i, 1);
-                            continue;
-                        }
-                    }
-
-                    for (let i = particles.length - 1; i >= 0; i--) {
-                        let p = particles[i];
-                        p.x += p.vx;
-                        p.y += p.vy;
-                        p.life -= dt;
-                        if (p.life <= 0) particles.splice(i, 1);
-                    }
-                }
-
-                function draw() {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    ctx.fillStyle = '#440000';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.1);
-                    ctx.fillStyle = '#000044';
-                    ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1);
-
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '24px Arial';
-                    ctx.textAlign = 'right';
-                    ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
-
-                    ctx.save();
-                    ctx.translate(bot.x, bot.y);
-                    ctx.beginPath();
-                    ctx.arc(0, 0, bot.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = bot.flashTimer > 0 ? (Math.random() > 0.5 ? '#ffff00' : '#ff0000') : bot.color;
-                    ctx.fill();
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(-8, -5, 4, 4);
-                    ctx.fillRect(4, -5, 4, 4);
-                    ctx.restore();
-
-                    ctx.save();
-                    ctx.globalAlpha = player.shielded ? 0.4 : 1.0;
-                    ctx.translate(player.x, player.y);
-                    ctx.beginPath();
-                    ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
-                    ctx.moveTo(0, -player.radius);
-                    ctx.lineTo(player.radius, player.radius);
-                    ctx.lineTo(-player.radius, player.radius);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.shadowBlur = 15;
-                    ctx.shadowColor = player.color;
-                    ctx.restore();
-
-                    for (let e of entities) {
-                        ctx.save();
-                        ctx.translate(e.x, e.y);
-                        if (e.type === 'hazard') {
-                            ctx.fillStyle = '#ff8c00';
-                            ctx.beginPath();
-                            ctx.moveTo(0, -e.radius);
-                            ctx.lineTo(e.radius, -e.radius/2);
-                            ctx.lineTo(e.radius*0.8, e.radius);
-                            ctx.lineTo(-e.radius*0.8, e.radius);
-                            ctx.lineTo(-e.radius, -e.radius/2);
-                            ctx.closePath();
-                            ctx.fill();
+                        if (player.homeY + deltaY > canvas.height * 0.9) {
+                            player.shielded = true;
+                            player.x = player.homeX;
+                            player.y = canvas.height * 0.95;
                         } else {
-                            ctx.fillStyle = '#00ffff';
-                            ctx.shadowBlur = 10;
-                            ctx.shadowColor = '#ff00ff';
+                            player.shielded = false;
+                            player.x = player.homeX + deltaX * 1.5;
+                            player.y = player.homeY + deltaY * 1.5;
+                            player.x = Math.max(0, Math.min(canvas.width, player.x));
+                            player.y = Math.max(0, Math.min(canvas.height, player.y));
+                        }
+                    });
+
+                    canvas.addEventListener('pointerup', (e) => {
+                        if (!pointerDown) return;
+                        pointerDown = false;
+                        const releaseX = e.clientX;
+                        const releaseY = e.clientY;
+
+                        let swipe_angle = null;
+                        if (impactPoint) {
+                            const dx = releaseX - impactPoint[0];
+                            const dy = impactPoint[1] - releaseY;
+                            swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                        }
+
+                        const hazards_on_screen = entities.filter(ent => ent.type === 'hazard').length;
+
+                        swipeData.push({
+                            timestamp: performance.now() - gameStartTime,
+                            swipe_angle: swipe_angle,
+                            peak_velocity: maxVelocity,
+                            current_bot_offensiveness: bot_offensiveness,
+                            hazards_on_screen: hazards_on_screen,
+                            current_score: score
+                        });
+
+                        impactPoint = null;
+                    });
+
+                    function createParticles(x, y, color) {
+                        for (let i = 0; i < 15; i++) {
+                            particles.push({
+                                x: x, y: y,
+                                vx: (Math.random() - 0.5) * 10,
+                                vy: (Math.random() - 0.5) * 10,
+                                life: 300 + Math.random() * 300,
+                                color: color
+                            });
+                        }
+                    }
+
+                    function update(dt) {
+                        if (isGameOver) return;
+                        const timeElapsed = performance.now() - gameStartTime;
+
+                        if (performance.now() - pointerTime > 100) currentVelocity = 0;
+
+                        bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
+
+                        if (!pointerDown) {
+                            player.x += (player.homeX - player.x) * 0.1;
+                            player.y += (player.homeY - player.y) * 0.1;
+                            player.shielded = false;
+                        }
+
+                        if (player.stunTimer > 0) player.stunTimer -= dt;
+                        if (bot.flashTimer > 0) bot.flashTimer -= dt;
+
+                        let nearestDist = Infinity;
+                        let targetX = bot.homeX;
+                        let targetY = bot.homeY;
+                        for (let e of entities) {
+                            if (e.y < canvas.height / 2 && e.vy < 0) {
+                                let d = Math.abs(e.y - bot.y);
+                                if (d < nearestDist) {
+                                    nearestDist = d;
+                                    targetX = e.x;
+                                    targetY = e.y;
+                                }
+                            }
+                        }
+                        bot.x += (targetX - bot.x) * 0.05;
+                        bot.y += (targetY - bot.y) * 0.05;
+                        bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
+
+                        spawnTimer -= dt;
+                        if (spawnTimer <= 0) {
+                            spawnEntity();
+                            spawnTimer = 400 + Math.random() * 600;
+                        }
+
+                        for (let i = entities.length - 1; i >= 0; i--) {
+                            let e = entities[i];
+                            e.x += e.vx;
+                            e.y += e.vy;
+
+                            if (e.x - e.radius < 0 || e.x + e.radius > canvas.width) {
+                                if (e.type === 'crystal') {
+                                    entities.splice(i, 1);
+                                    continue;
+                                }
+                                e.vx *= -1;
+                                e.x = Math.max(e.radius, Math.min(canvas.width - e.radius, e.x));
+                                if (e.type === 'hazard' && Math.abs(e.vx) > 3) {
+                                    score += 10;
+                                    createParticles(e.x, e.y, '#ff8c00');
+                                    entities.splice(i, 1);
+                                    continue;
+                                }
+                            }
+
+                            const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
+                            if (distToPlayer < e.radius + player.radius && e.active) {
+                                if (!player.shielded && player.stunTimer <= 0) {
+                                    if (!impactPoint) impactPoint = [currentX, currentY];
+
+                                    if (e.type === 'hazard') {
+                                        if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
+                                            const dx = currentX - startX;
+                                            const dy = currentY - startY;
+                                            const mag = Math.hypot(dx, dy);
+                                            if (mag > 0) {
+                                                e.vx = (dx / mag) * 10;
+                                                e.vy = (dy / mag) * 10;
+                                            }
+                                        } else {
+                                            score -= 50;
+                                            playAversiveShock();
+                                            player.stunTimer = 1000;
+                                            createParticles(player.x, player.y, '#ff0000');
+                                            entities.splice(i, 1);
+                                            continue;
+                                        }
+                                    } else if (e.type === 'crystal') {
+                                        if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
+                                            const dx = currentX - startX;
+                                            const dy = currentY - startY;
+                                            const mag = Math.hypot(dx, dy);
+                                            if (mag > 0) {
+                                                e.vx = (dx / mag) * 8;
+                                                let new_vy = (dy / mag) * 8;
+                                                e.vy = new_vy < 0 ? 0 : new_vy;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            const distToBot = Math.hypot(e.x - bot.x, e.y - bot.y);
+                            if (distToBot < e.radius + bot.radius && e.active) {
+                                if (e.type === 'hazard') {
+                                    if (Math.random() < bot_offensiveness) {
+                                        e.vx = (Math.random() - 0.5) * 5;
+                                        e.vy = 8;
+                                    } else {
+                                        e.vx = (bot.x > canvas.width / 2 ? -10 : 10);
+                                        e.vy = 0;
+                                    }
+                                }
+                            }
+
+                            if (e.y > canvas.height * 0.9) {
+                                if (e.type === 'hazard') {
+                                    score -= 20;
+                                    playAversiveCrunch();
+                                    createParticles(e.x, e.y, '#aaaaaa');
+                                } else if (e.type === 'crystal') {
+                                    score += 50;
+                                    playPositiveChime();
+                                    createParticles(e.x, e.y, '#00ffff');
+                                }
+                                entities.splice(i, 1);
+                                continue;
+                            }
+
+                            if (e.y < canvas.height * 0.1) {
+                                if (e.type === 'hazard') {
+                                    score -= 20;
+                                    playSharpAlert();
+                                    bot.flashTimer = 500;
+                                    createParticles(e.x, e.y, '#ffff00');
+                                }
+                                entities.splice(i, 1);
+                                continue;
+                            }
+                        }
+
+                        for (let i = particles.length - 1; i >= 0; i--) {
+                            let p = particles[i];
+                            p.x += p.vx;
+                            p.y += p.vy;
+                            p.life -= dt;
+                            if (p.life <= 0) particles.splice(i, 1);
+                        }
+                    }
+
+                    function draw() {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        ctx.fillStyle = '#440000';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height * 0.1);
+                        ctx.fillStyle = '#000044';
+                        ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1);
+
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = '24px Arial';
+                        ctx.textAlign = 'right';
+                        ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
+
+                        ctx.save();
+                        ctx.translate(bot.x, bot.y);
+                        ctx.beginPath();
+                        ctx.arc(0, 0, bot.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = bot.flashTimer > 0 ? (Math.random() > 0.5 ? '#ffff00' : '#ff0000') : bot.color;
+                        ctx.fill();
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(-8, -5, 4, 4);
+                        ctx.fillRect(4, -5, 4, 4);
+                        ctx.restore();
+
+                        ctx.save();
+                        ctx.globalAlpha = player.shielded ? 0.4 : 1.0;
+                        ctx.translate(player.x, player.y);
+                        ctx.beginPath();
+                        ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
+                        ctx.moveTo(0, -player.radius);
+                        ctx.lineTo(player.radius, player.radius);
+                        ctx.lineTo(-player.radius, player.radius);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = player.color;
+                        ctx.restore();
+
+                        for (let e of entities) {
+                            ctx.save();
+                            ctx.translate(e.x, e.y);
+                            if (e.type === 'hazard') {
+                                ctx.fillStyle = '#ff8c00';
+                                ctx.beginPath();
+                                ctx.moveTo(0, -e.radius);
+                                ctx.lineTo(e.radius, -e.radius / 2);
+                                ctx.lineTo(e.radius * 0.8, e.radius);
+                                ctx.lineTo(-e.radius * 0.8, e.radius);
+                                ctx.lineTo(-e.radius, -e.radius / 2);
+                                ctx.closePath();
+                                ctx.fill();
+                            } else {
+                                ctx.fillStyle = '#00ffff';
+                                ctx.shadowBlur = 10;
+                                ctx.shadowColor = '#ff00ff';
+                                ctx.beginPath();
+                                ctx.moveTo(0, -e.radius);
+                                ctx.lineTo(e.radius / 2, 0);
+                                ctx.lineTo(0, e.radius);
+                                ctx.lineTo(-e.radius / 2, 0);
+                                ctx.closePath();
+                                ctx.fill();
+                            }
+                            ctx.restore();
+                        }
+
+                        for (let p of particles) {
+                            ctx.globalAlpha = p.life / 600;
+                            ctx.fillStyle = p.color;
                             ctx.beginPath();
-                            ctx.moveTo(0, -e.radius);
-                            ctx.lineTo(e.radius/2, 0);
-                            ctx.lineTo(0, e.radius);
-                            ctx.lineTo(-e.radius/2, 0);
-                            ctx.closePath();
+                            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
                             ctx.fill();
                         }
-                        ctx.restore();
+                        ctx.globalAlpha = 1.0;
                     }
 
-                    for (let p of particles) {
-                        ctx.globalAlpha = p.life / 600;
-                        ctx.fillStyle = p.color;
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-                        ctx.fill();
+                    function loop(time) {
+                        if (isGameOver) return;
+                        const dt = time - lastFrameTime;
+                        lastFrameTime = time;
+
+                        update(dt);
+                        draw();
+
+                        if (time - gameStartTime >= trial.duration) {
+                            isGameOver = true;
+                            endTrial();
+                        } else {
+                            animationId = requestAnimationFrame(loop);
+                        }
                     }
-                    ctx.globalAlpha = 1.0;
-                }
 
-                function loop(time) {
-                    if (isGameOver) return;
-                    const dt = time - lastFrameTime;
-                    lastFrameTime = time;
-
-                    update(dt);
-                    draw();
-
-                    if (time - gameStartTime >= trial.duration) {
-                        isGameOver = true;
-                        endTrial();
-                    } else {
-                        animationId = requestAnimationFrame(loop);
+                    function endTrial() {
+                        window.removeEventListener('resize', resizeCanvas);
+                        const trial_data = {
+                            swipes_data: JSON.stringify(swipeData),
+                            final_score: score
+                        };
+                        display_element.innerHTML = '';
+                        jsPsych.finishTrial(trial_data);
                     }
-                }
 
-                function endTrial() {
-                    window.removeEventListener('resize', resizeCanvas);
-                    const trial_data = {
-                        swipes_data: JSON.stringify(swipeData),
-                        final_score: score
-                    };
-                    display_element.innerHTML = '';
-                    jsPsych.finishTrial(trial_data);
+                    requestAnimationFrame(loop);
                 }
-
-                requestAnimationFrame(loop);
             }
-        }
-        Plugin.info = info;
-        return Plugin;
-    })(jsPsychModule);
+            Plugin.info = info;
+            return Plugin;
+        })(jsPsychModule);
 
-    const timeline = [];
+        const timeline = [];
 
-    timeline.push({
-        type: jsPsychInstructions,
-        pages: [
-            '<h2>Defense Game</h2><p>Welcome! In this game, you defend your base (bottom blue area) and attack the opponent (top red area).</p>',
-            '<p>Hazards (orange rocks) will fall. ' + action_text + ' across the screen to dash and deflect them.</p><p>Energy Boosts (cyan crystals) will also fall. Guide them into your base for points.</p>',
-            '<p>Drag straight down into your base to hide (shield mode).</p><p>Click next to start!</p>'
-        ],
-        show_clickable_nav: true
-    });
+        timeline.push({
+            type: jsPsychInstructions,
+            pages: [
+                '<h2>Defense Game</h2><p>Welcome! In this game, you defend your base (bottom blue area) and attack the opponent (top red area).</p>',
+                '<p>Hazards (orange rocks) will fall. ' + action_text + ' across the screen to dash and deflect them.</p><p>Energy Boosts (cyan crystals) will also fall. Guide them into your base for points.</p>',
+                '<p>Drag straight down into your base to hide (shield mode).</p><p>Click next to start!</p>'
+            ],
+            show_clickable_nav: true
+        });
 
-    timeline.push({
-        type: jsPsychContinuousDefense,
-        duration: 180000
-    });
+        timeline.push({
+            type: jsPsychContinuousDefense,
+            duration: 120000
+        });
 
-    timeline.push({
-        type: jsPsychHtmlButtonResponse,
-        stimulus: function() {
-            let last_trial_data = jsPsych.data.get().last(1).values()[0];
-            return `<h1>Game Over</h1><p style="font-size: 60px; font-weight: bold;">Final Score: ${last_trial_data.final_score || 0}</p>`;
-        },
-        choices: ['Finish']
-    });
+        timeline.push({
+            type: jsPsychHtmlButtonResponse,
+            stimulus: function () {
+                let last_trial_data = jsPsych.data.get().last(1).values()[0];
+                return `<h1>Game Over</h1><p style="font-size: 60px; font-weight: bold;">Final Score: ${last_trial_data.final_score || 0}</p>`;
+            },
+            choices: ['Finish']
+        });
 
-    const save_data = {
-        type: jsPsychPipe,
-        action: "save",
-        experiment_id: "GsG4J26A4XuX",
-        filename: filename,
-        data_string: () => jsPsych.data.get().csv()
-    };
-    timeline.push(save_data);
+        const save_data = {
+            type: jsPsychPipe,
+            action: "save",
+            experiment_id: "GsG4J26A4XuX",
+            filename: filename,
+            data_string: () => jsPsych.data.get().csv()
+        };
+        timeline.push(save_data);
 
-    jsPsych.run(timeline);
-</script>
+        jsPsych.run(timeline);
+    </script>
 </body>
+
 </html>

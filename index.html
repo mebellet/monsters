@@ -96,7 +96,8 @@
                     resizeCanvas();
                     window.addEventListener('resize', resizeCanvas);
 
-                    const DASH_VELOCITY_THRESHOLD = 0.1; // <-- Modify this value to easily adapt the pushing threshold
+                    const DASH_VELOCITY_THRESHOLD = 0.1;
+                    const MIN_SWIPE_DISTANCE = 15; // NEW: The avatar must travel this far past impact to trigger a push
 
                     let score = 0;
                     let bot_offensiveness = 0.0;
@@ -175,7 +176,8 @@
                             vx: (Math.random() * 2 - 1) * speedMult,
                             vy: dir * (Math.random() * 1.5 + 1) * speedMult,
                             radius: 30,
-                            active: true
+                            active: true,
+                            playerDeflected: false // NEW: Track if the player already pushed this
                         });
                     }
 
@@ -242,9 +244,8 @@
 
                         let swipe_angle = null;
                         if (impactPoint) {
-                            // Calculate final angle using the AVATAR'S final center position, not the finger
                             const dx = player.x - impactPoint[0];
-                            const dy = impactPoint[1] - player.y; // Inverted Y-axis for standard 360-degree cartesian
+                            const dy = impactPoint[1] - player.y;
                             swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
                         }
 
@@ -335,22 +336,24 @@
                             }
 
                             const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
-                            if (distToPlayer < e.radius + player.radius && e.active) {
+
+                            // NEW: Notice the `!e.playerDeflected` addition. If it was already pushed, it ignores the player.
+                            if (distToPlayer < e.radius + player.radius && e.active && !e.playerDeflected) {
                                 if (!player.shielded && player.stunTimer <= 0) {
 
-                                    // 1. Lock impact point to the AVATAR'S exact center at the moment of collision
                                     if (!impactPoint) impactPoint = [player.x, player.y];
 
                                     if (e.type === 'hazard') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            // 2. Calculate the push vector using the AVATAR'S current center
                                             const dx = player.x - impactPoint[0];
                                             const dy = player.y - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
 
-                                            if (mag > 5) {
-                                                e.vx = (dx / mag) * 10;
-                                                e.vy = (dy / mag) * 10;
+                                            // NEW: Require deliberate distance traveled before setting the trajectory
+                                            if (mag > MIN_SWIPE_DISTANCE) {
+                                                e.vx = (dx / mag) * 12; // Adjusted slightly for a clean, fast launch
+                                                e.vy = (dy / mag) * 12;
+                                                e.playerDeflected = true; // Mark as safely pushed!
                                             }
                                         } else {
                                             score -= 50;
@@ -366,10 +369,11 @@
                                             const dy = player.y - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
 
-                                            if (mag > 5) {
+                                            if (mag > MIN_SWIPE_DISTANCE) {
                                                 e.vx = (dx / mag) * 8;
                                                 let new_vy = (dy / mag) * 8;
-                                                e.vy = new_vy < 0 ? 0 : new_vy; // Crystals only go down
+                                                e.vy = new_vy < 0 ? 0 : new_vy;
+                                                e.playerDeflected = true; // Prevents weird multi-hits on crystals
                                             }
                                         }
                                     }
@@ -386,6 +390,8 @@
                                         e.vx = (bot.x > canvas.width / 2 ? -10 : 10);
                                         e.vy = 0;
                                     }
+                                    // Reset deflection so if the bot hits it down, it CAN hurt the player again
+                                    e.playerDeflected = false;
                                 }
                             }
 
@@ -453,7 +459,6 @@
                         ctx.translate(player.x, player.y);
                         ctx.beginPath();
                         ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
-                        // Draw a perfect circle centered at 0,0 (since the context is already translated to player.x, player.y)
                         ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
                         ctx.closePath();
                         ctx.fill();

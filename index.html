@@ -11,7 +11,7 @@
     <link href="https://unpkg.com/jspsych@8/css/jspsych.css" rel="stylesheet" type="text/css" />
     <style>
         :root {
-            --bg-color: #1b263b;
+            --bg-color: #9fb9eb;
         }
 
         body,
@@ -69,7 +69,7 @@
                 parameters: {
                     duration: {
                         type: jspsych.ParameterType.INT,
-                        default: 180000,
+                        default: 120000,
                         description: "Duration of the game in ms."
                     }
                 }
@@ -96,7 +96,7 @@
                     resizeCanvas();
                     window.addEventListener('resize', resizeCanvas);
 
-                    const DASH_VELOCITY_THRESHOLD = 0.5; // <-- Modify this value to easily adapt the pushing threshold
+                    const DASH_VELOCITY_THRESHOLD = 0.1; // <-- Modify this value to easily adapt the pushing threshold
 
                     let score = 0;
                     let bot_offensiveness = 0.0;

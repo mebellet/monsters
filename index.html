@@ -239,13 +239,12 @@
                     canvas.addEventListener('pointerup', (e) => {
                         if (!pointerDown) return;
                         pointerDown = false;
-                        const releaseX = e.clientX;
-                        const releaseY = e.clientY;
 
                         let swipe_angle = null;
                         if (impactPoint) {
-                            const dx = releaseX - impactPoint[0];
-                            const dy = impactPoint[1] - releaseY;
+                            // Calculate final angle using the AVATAR'S final center position, not the finger
+                            const dx = player.x - impactPoint[0];
+                            const dy = impactPoint[1] - player.y; // Inverted Y-axis for standard 360-degree cartesian
                             swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
                         }
 
@@ -338,16 +337,17 @@
                             const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
                             if (distToPlayer < e.radius + player.radius && e.active) {
                                 if (!player.shielded && player.stunTimer <= 0) {
-                                    if (!impactPoint) impactPoint = [currentX, currentY];
+
+                                    // 1. Lock impact point to the AVATAR'S exact center at the moment of collision
+                                    if (!impactPoint) impactPoint = [player.x, player.y];
 
                                     if (e.type === 'hazard') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            // PHYSICS FIX: Calculate angle from impact point, not start point
-                                            const dx = currentX - impactPoint[0];
-                                            const dy = currentY - impactPoint[1];
+                                            // 2. Calculate the push vector using the AVATAR'S current center
+                                            const dx = player.x - impactPoint[0];
+                                            const dy = player.y - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
 
-                                            // Wait for the finger to travel 5 pixels past impact to get a clean, stable vector
                                             if (mag > 5) {
                                                 e.vx = (dx / mag) * 10;
                                                 e.vy = (dy / mag) * 10;
@@ -362,9 +362,8 @@
                                         }
                                     } else if (e.type === 'crystal') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            // PHYSICS FIX: Calculate angle from impact point
-                                            const dx = currentX - impactPoint[0];
-                                            const dy = currentY - impactPoint[1];
+                                            const dx = player.x - impactPoint[0];
+                                            const dy = player.y - impactPoint[1];
                                             const mag = Math.hypot(dx, dy);
 
                                             if (mag > 5) {
@@ -454,9 +453,8 @@
                         ctx.translate(player.x, player.y);
                         ctx.beginPath();
                         ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
-                        ctx.moveTo(0, -player.radius);
-                        ctx.lineTo(player.radius, player.radius);
-                        ctx.lineTo(-player.radius, player.radius);
+                        // Draw a perfect circle centered at 0,0 (since the context is already translated to player.x, player.y)
+                        ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
                         ctx.closePath();
                         ctx.fill();
                         ctx.shadowBlur = 15;

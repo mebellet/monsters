@@ -96,7 +96,7 @@
                     resizeCanvas();
                     window.addEventListener('resize', resizeCanvas);
 
-                    const DASH_VELOCITY_THRESHOLD = 0.15; // Increased slightly to prevent accidental deflection while wandering
+                    const DASH_VELOCITY_THRESHOLD = 0.15;
 
                     let score = 0;
                     let bot_offensiveness = 0.0;
@@ -165,18 +165,23 @@
                     let spawnTimer = 0;
 
                     function spawnEntity() {
-                        const isHazard = Math.random() < 0.70;
-                        const dir = Math.random() < 0.5 ? 1 : -1;
-                        const speedMult = isHazard ? 2.0 : 1.0;
+                        // CHANCE OF HAZARD VS CRYSTAL (e.g. 0.85 = 85% hazards, 15% crystals)
+                        const isHazard = Math.random() < 0.85;
+                        const dir = Math.random() < 0.5 ? 1 : -1; // 1 = down (to player), -1 = up (to bot)
 
-                        let startVx, startVy;
+                        let startVx, startVy, entityColor;
+
                         if (isHazard) {
-                            startVx = (Math.random() * 4 - 2); // Hazards move left/right between -2 and 2
-                            startVy = dir * (Math.random() * 3 + 2); // Hazards move up/down between 2 and 5
+                            startVx = (Math.random() * 4 - 2);
+                            startVy = dir * (Math.random() * 3 + 2);
+
+                            // PERMANENT COLOR LOGIC: Red if moving to player, Orange if moving to bot
+                            entityColor = startVy > 0 ? '#ff0033' : '#ff8c00';
                         } else {
                             // CRYSTAL VELOCITY SETTINGS:
-                            startVx = (Math.random() * 2 - 1); // Crystals drift left/right slowly (-1 to 1)
-                            startVy = dir * (Math.random() * 1.5 + 1); // Crystals drift up/down slowly (1 to 2.5)
+                            startVx = (Math.random() * 2 - 1);
+                            startVy = dir * (Math.random() * 1.5 + 1);
+                            entityColor = '#00ffff'; // Cyan
                         }
 
                         entities.push({
@@ -187,7 +192,8 @@
                             vy: startVy,
                             radius: 30,
                             active: true,
-                            playerDeflected: false
+                            playerDeflected: false,
+                            color: entityColor
                         });
                     }
 
@@ -199,12 +205,9 @@
                     let pointerTime = 0;
                     let maxVelocity = 0;
                     let currentVelocity = 0;
-
-                    // NEW: Track instantaneous velocity vectors
                     let pointerVx = 0;
                     let pointerVy = 0;
 
-                    // NEW: Angle rendering state
                     let lastSwipeAngle = null;
                     let lastSwipeTime = 0;
 
@@ -224,19 +227,18 @@
                         pointerVx = 0;
                         pointerVy = 0;
 
-                        lastSwipeAngle = null; // Clear angle display on new touch
+                        lastSwipeAngle = null;
                     });
 
                     canvas.addEventListener('pointermove', (e) => {
                         if (!pointerDown) return;
                         const now = performance.now();
-                        const dt = Math.max(1, now - pointerTime); // Prevent divide by zero
+                        const dt = Math.max(1, now - pointerTime);
 
                         if (dt > 0) {
                             const dx = e.clientX - currentX;
                             const dy = e.clientY - currentY;
 
-                            // Capture instantaneous vector
                             pointerVx = dx / dt;
                             pointerVy = dy / dt;
 
@@ -270,7 +272,6 @@
 
                         const hazards_on_screen = entities.filter(ent => ent.type === 'hazard').length;
 
-                        // Log the last deflected angle associated with this touch cycle if one occurred
                         swipeData.push({
                             timestamp: performance.now() - gameStartTime,
                             swipe_angle: lastSwipeAngle,
@@ -297,7 +298,6 @@
                         if (isGameOver) return;
                         const timeElapsed = performance.now() - gameStartTime;
 
-                        // Decay velocity to 0 if the pointer stops moving entirely while pressed
                         if (performance.now() - pointerTime > 50) {
                             currentVelocity = 0;
                             pointerVx = 0;
@@ -335,7 +335,8 @@
                         spawnTimer -= dt;
                         if (spawnTimer <= 0) {
                             spawnEntity();
-                            spawnTimer = 200 + Math.random() * 400;
+                            // SPAWN FREQUENCY: Change these numbers to make entities spawn faster or slower
+                            spawnTimer = 200 + Math.random() * 300;
                         }
 
                         for (let i = entities.length - 1; i >= 0; i--) {
@@ -352,7 +353,7 @@
                                 e.x = Math.max(e.radius, Math.min(canvas.width - e.radius, e.x));
                                 if (e.type === 'hazard' && Math.abs(e.vx) > 3) {
                                     score += 10;
-                                    createParticles(e.x, e.y, '#ff8c00');
+                                    createParticles(e.x, e.y, e.color); // Matches entity color
                                     entities.splice(i, 1);
                                     continue;
                                 }
@@ -364,26 +365,22 @@
                                 if (!player.shielded && player.stunTimer <= 0) {
 
                                     if (e.type === 'hazard') {
-                                        // Check instantaneous velocity to determine if dragging vs swiping
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
                                             const mag = Math.hypot(pointerVx, pointerVy);
 
                                             if (mag > 0) {
-                                                // Launch based on immediate pointer trajectory
                                                 e.vx = (pointerVx / mag) * 12;
                                                 e.vy = (pointerVy / mag) * 12;
                                                 e.playerDeflected = true;
 
-                                                // Calculate standard Cartesian angle (-pointerVy because canvas Y goes down)
                                                 let angleRad = Math.atan2(-pointerVy, pointerVx);
                                                 let angleDeg = angleRad * (180 / Math.PI);
-                                                if (angleDeg < 0) angleDeg += 360; // Normalize 0-360
+                                                if (angleDeg < 0) angleDeg += 360;
 
                                                 lastSwipeAngle = angleDeg.toFixed(1);
                                                 lastSwipeTime = performance.now();
                                             }
                                         } else {
-                                            // Player hit while standing still or wandering slowly
                                             score -= 50;
                                             playAversiveShock();
                                             player.stunTimer = 1000;
@@ -398,7 +395,7 @@
                                             if (mag > 0) {
                                                 e.vx = (pointerVx / mag) * 8;
                                                 let new_vy = (pointerVy / mag) * 8;
-                                                e.vy = new_vy < 0 ? 0 : new_vy; // Prevent shooting crystals off top
+                                                e.vy = new_vy < 0 ? 0 : new_vy;
                                                 e.playerDeflected = true;
                                             }
                                         }
@@ -410,21 +407,19 @@
                             if (distToBot < e.radius + bot.radius && e.active) {
                                 if (e.type === 'hazard') {
 
-                                    // NEW: Check if the player threw this hazard at the bot
+                                    // BOT COLLISION FIX: If player sent it, 80% chance bot takes damage
                                     if (e.playerDeflected) {
-                                        // 80% chance the bot takes the hit and fails to backfire
                                         if (Math.random() < 0.80) {
-                                            score += 100; // Reward the player for a direct hit!
-                                            bot.flashTimer = 500; // Make the bot flash
-                                            playPositiveChime(); // Play a rewarding sound
-                                            createParticles(bot.x, bot.y, '#ff0000'); // Red explosion at bot
-                                            entities.splice(i, 1); // Destroy the hazard so it doesn't get stuck
-                                            continue; // Move to the next entity
+                                            score += 100;
+                                            bot.flashTimer = 500;
+                                            playPositiveChime();
+                                            createParticles(bot.x, bot.y, '#ffffff'); // White explosion for bot hit
+                                            entities.splice(i, 1);
+                                            continue;
                                         }
                                     }
 
-                                    // The bot's counter-attack logic (happens if it wasn't deflected by the player, 
-                                    // or if it successfully "parried" the 20% chance above)
+                                    // Bot retaliates successfully
                                     if (Math.random() < bot_offensiveness) {
                                         e.vx = (Math.random() - 0.5) * 5;
                                         e.vy = 8;
@@ -432,7 +427,6 @@
                                         e.vx = (bot.x > canvas.width / 2 ? -10 : 10);
                                         e.vy = 0;
                                     }
-                                    // Reset so if the bot hits it down, it can hurt the player again
                                     e.playerDeflected = false;
                                 }
                             }
@@ -441,11 +435,11 @@
                                 if (e.type === 'hazard') {
                                     score -= 20;
                                     playAversiveCrunch();
-                                    createParticles(e.x, e.y, '#aaaaaa');
+                                    createParticles(e.x, e.y, e.color);
                                 } else if (e.type === 'crystal') {
                                     score += 50;
                                     playPositiveChime();
-                                    createParticles(e.x, e.y, '#00ffff');
+                                    createParticles(e.x, e.y, e.color);
                                 }
                                 entities.splice(i, 1);
                                 continue;
@@ -456,7 +450,7 @@
                                     score -= 20;
                                     playSharpAlert();
                                     bot.flashTimer = 500;
-                                    createParticles(e.x, e.y, '#ffff00');
+                                    createParticles(e.x, e.y, e.color);
                                 }
                                 entities.splice(i, 1);
                                 continue;
@@ -481,16 +475,15 @@
                         ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1);
 
                         ctx.fillStyle = '#ffffff';
-                        ctx.font = '50px Arial';
+                        ctx.font = '24px Arial';
                         ctx.textAlign = 'right';
                         ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
 
-                        // Draw the last swipe angle for 3 seconds
                         if (lastSwipeAngle !== null && (performance.now() - lastSwipeTime) < 3000) {
-                            ctx.fillStyle = '#000000';
-                            ctx.font = '50px Arial';
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = '20px Arial';
                             ctx.textAlign = 'left';
-                            ctx.fillText(`Last Swipe: ${lastSwipeAngle}°`, canvas.width - 20, canvas.height / 4);
+                            ctx.fillText(`Last Swipe: ${lastSwipeAngle}°`, 20, canvas.height / 2);
                         }
 
                         ctx.save();
@@ -501,129 +494,4 @@
                         ctx.fill();
                         ctx.fillStyle = '#000';
                         ctx.fillRect(-8, -5, 4, 4);
-                        ctx.fillRect(4, -5, 4, 4);
-                        ctx.restore();
-
-                        ctx.save();
-                        ctx.globalAlpha = player.shielded ? 0.4 : 1.0;
-                        ctx.translate(player.x, player.y);
-                        ctx.beginPath();
-                        ctx.fillStyle = player.stunTimer > 0 ? (Math.random() > 0.5 ? '#ffffff' : '#ff0000') : player.color;
-                        ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
-                        ctx.closePath();
-                        ctx.fill();
-                        ctx.shadowBlur = 15;
-                        ctx.shadowColor = player.color;
-                        ctx.restore();
-
-                        for (let e of entities) {
-                            ctx.save();
-                            ctx.translate(e.x, e.y);
-                            if (e.type === 'hazard') {
-                                ctx.fillStyle = '#ff8c00';
-                                ctx.beginPath();
-                                ctx.moveTo(0, -e.radius);
-                                ctx.lineTo(e.radius, -e.radius / 2);
-                                ctx.lineTo(e.radius * 0.8, e.radius);
-                                ctx.lineTo(-e.radius * 0.8, e.radius);
-                                ctx.lineTo(-e.radius, -e.radius / 2);
-                                ctx.closePath();
-                                ctx.fill();
-                            } else {
-                                ctx.fillStyle = '#00ffff';
-                                ctx.shadowBlur = 10;
-                                ctx.shadowColor = '#ff00ff';
-                                ctx.beginPath();
-                                ctx.moveTo(0, -e.radius);
-                                ctx.lineTo(e.radius / 2, 0);
-                                ctx.lineTo(0, e.radius);
-                                ctx.lineTo(-e.radius / 2, 0);
-                                ctx.closePath();
-                                ctx.fill();
-                            }
-                            ctx.restore();
-                        }
-
-                        for (let p of particles) {
-                            ctx.globalAlpha = p.life / 600;
-                            ctx.fillStyle = p.color;
-                            ctx.beginPath();
-                            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-                            ctx.fill();
-                        }
-                        ctx.globalAlpha = 1.0;
-                    }
-
-                    function loop(time) {
-                        if (isGameOver) return;
-                        const dt = time - lastFrameTime;
-                        lastFrameTime = time;
-
-                        update(dt);
-                        draw();
-
-                        if (time - gameStartTime >= trial.duration) {
-                            isGameOver = true;
-                            endTrial();
-                        } else {
-                            animationId = requestAnimationFrame(loop);
-                        }
-                    }
-
-                    function endTrial() {
-                        window.removeEventListener('resize', resizeCanvas);
-                        const trial_data = {
-                            swipes_data: JSON.stringify(swipeData),
-                            final_score: score
-                        };
-                        display_element.innerHTML = '';
-                        jsPsych.finishTrial(trial_data);
-                    }
-
-                    requestAnimationFrame(loop);
-                }
-            }
-            Plugin.info = info;
-            return Plugin;
-        })(jsPsychModule);
-
-        const timeline = [];
-
-        timeline.push({
-            type: jsPsychInstructions,
-            pages: [
-                '<h2>Defense Game</h2><p>Welcome! In this game, you defend your base (bottom blue area) and attack the opponent (top red area).</p>',
-                '<p>Hazards (orange rocks) will fall. ' + action_text + ' across the screen to dash and deflect them.</p><p>Energy Boosts (cyan crystals) will also fall. Guide them into your base for points.</p>',
-                '<p>Drag straight down into your base to hide (shield mode).</p><p>Click next to start!</p>'
-            ],
-            show_clickable_nav: true
-        });
-
-        timeline.push({
-            type: jsPsychContinuousDefense,
-            duration: 120000
-        });
-
-        timeline.push({
-            type: jsPsychHtmlButtonResponse,
-            stimulus: function () {
-                let last_trial_data = jsPsych.data.get().last(1).values()[0];
-                return `<h1>Game Over</h1><p style="font-size: 60px; font-weight: bold;">Final Score: ${last_trial_data.final_score || 0}</p>`;
-            },
-            choices: ['Finish']
-        });
-
-        const save_data = {
-            type: jsPsychPipe,
-            action: "save",
-            experiment_id: "GsG4J26A4XuX",
-            filename: filename,
-            data_string: () => jsPsych.data.get().csv()
-        };
-        timeline.push(save_data);
-
-        jsPsych.run(timeline);
-    </script>
-</body>
-
-</html>
+                        ctx.fillRect

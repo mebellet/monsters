@@ -96,8 +96,7 @@
                     resizeCanvas();
                     window.addEventListener('resize', resizeCanvas);
 
-                    const DASH_VELOCITY_THRESHOLD = 0.1;
-                    const MIN_SWIPE_DISTANCE = 15; // NEW: The avatar must travel this far past impact to trigger a push
+                    const DASH_VELOCITY_THRESHOLD = 0.15; // Increased slightly to prevent accidental deflection while wandering
 
                     let score = 0;
                     let bot_offensiveness = 0.0;
@@ -177,7 +176,7 @@
                             vy: dir * (Math.random() * 1.5 + 1) * speedMult,
                             radius: 30,
                             active: true,
-                            playerDeflected: false // NEW: Track if the player already pushed this
+                            playerDeflected: false
                         });
                     }
 
@@ -189,7 +188,14 @@
                     let pointerTime = 0;
                     let maxVelocity = 0;
                     let currentVelocity = 0;
-                    let impactPoint = null;
+
+                    // NEW: Track instantaneous velocity vectors
+                    let pointerVx = 0;
+                    let pointerVy = 0;
+
+                    // NEW: Angle rendering state
+                    let lastSwipeAngle = null;
+                    let lastSwipeTime = 0;
 
                     canvas.addEventListener('pointerdown', (e) => {
                         if (!audioCtx) {
@@ -204,20 +210,29 @@
                         pointerTime = performance.now();
                         maxVelocity = 0;
                         currentVelocity = 0;
-                        impactPoint = null;
+                        pointerVx = 0;
+                        pointerVy = 0;
+
+                        lastSwipeAngle = null; // Clear angle display on new touch
                     });
 
                     canvas.addEventListener('pointermove', (e) => {
                         if (!pointerDown) return;
                         const now = performance.now();
-                        const dt = now - pointerTime;
+                        const dt = Math.max(1, now - pointerTime); // Prevent divide by zero
+
                         if (dt > 0) {
                             const dx = e.clientX - currentX;
                             const dy = e.clientY - currentY;
-                            const vel = Math.sqrt(dx * dx + dy * dy) / dt;
-                            if (vel > maxVelocity) maxVelocity = vel;
-                            currentVelocity = vel;
+
+                            // Capture instantaneous vector
+                            pointerVx = dx / dt;
+                            pointerVy = dy / dt;
+
+                            currentVelocity = Math.hypot(pointerVx, pointerVy);
+                            if (currentVelocity > maxVelocity) maxVelocity = currentVelocity;
                         }
+
                         currentX = e.clientX;
                         currentY = e.clientY;
                         pointerTime = now;
@@ -242,25 +257,17 @@
                         if (!pointerDown) return;
                         pointerDown = false;
 
-                        let swipe_angle = null;
-                        if (impactPoint) {
-                            const dx = player.x - impactPoint[0];
-                            const dy = impactPoint[1] - player.y;
-                            swipe_angle = Math.atan2(dy, dx) * (180 / Math.PI);
-                        }
-
                         const hazards_on_screen = entities.filter(ent => ent.type === 'hazard').length;
 
+                        // Log the last deflected angle associated with this touch cycle if one occurred
                         swipeData.push({
                             timestamp: performance.now() - gameStartTime,
-                            swipe_angle: swipe_angle,
+                            swipe_angle: lastSwipeAngle,
                             peak_velocity: maxVelocity,
                             current_bot_offensiveness: bot_offensiveness,
                             hazards_on_screen: hazards_on_screen,
                             current_score: score
                         });
-
-                        impactPoint = null;
                     });
 
                     function createParticles(x, y, color) {
@@ -279,7 +286,12 @@
                         if (isGameOver) return;
                         const timeElapsed = performance.now() - gameStartTime;
 
-                        if (performance.now() - pointerTime > 100) currentVelocity = 0;
+                        // Decay velocity to 0 if the pointer stops moving entirely while pressed
+                        if (performance.now() - pointerTime > 50) {
+                            currentVelocity = 0;
+                            pointerVx = 0;
+                            pointerVy = 0;
+                        }
 
                         bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
 
@@ -337,25 +349,30 @@
 
                             const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
 
-                            // NEW: Notice the `!e.playerDeflected` addition. If it was already pushed, it ignores the player.
                             if (distToPlayer < e.radius + player.radius && e.active && !e.playerDeflected) {
                                 if (!player.shielded && player.stunTimer <= 0) {
 
-                                    if (!impactPoint) impactPoint = [player.x, player.y];
-
                                     if (e.type === 'hazard') {
+                                        // Check instantaneous velocity to determine if dragging vs swiping
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            const dx = player.x - impactPoint[0];
-                                            const dy = player.y - impactPoint[1];
-                                            const mag = Math.hypot(dx, dy);
+                                            const mag = Math.hypot(pointerVx, pointerVy);
 
-                                            // NEW: Require deliberate distance traveled before setting the trajectory
-                                            if (mag > MIN_SWIPE_DISTANCE) {
-                                                e.vx = (dx / mag) * 12; // Adjusted slightly for a clean, fast launch
-                                                e.vy = (dy / mag) * 12;
-                                                e.playerDeflected = true; // Mark as safely pushed!
+                                            if (mag > 0) {
+                                                // Launch based on immediate pointer trajectory
+                                                e.vx = (pointerVx / mag) * 12;
+                                                e.vy = (pointerVy / mag) * 12;
+                                                e.playerDeflected = true;
+
+                                                // Calculate standard Cartesian angle (-pointerVy because canvas Y goes down)
+                                                let angleRad = Math.atan2(-pointerVy, pointerVx);
+                                                let angleDeg = angleRad * (180 / Math.PI);
+                                                if (angleDeg < 0) angleDeg += 360; // Normalize 0-360
+
+                                                lastSwipeAngle = angleDeg.toFixed(1);
+                                                lastSwipeTime = performance.now();
                                             }
                                         } else {
+                                            // Player hit while standing still or wandering slowly
                                             score -= 50;
                                             playAversiveShock();
                                             player.stunTimer = 1000;
@@ -365,15 +382,13 @@
                                         }
                                     } else if (e.type === 'crystal') {
                                         if (pointerDown && currentVelocity > DASH_VELOCITY_THRESHOLD) {
-                                            const dx = player.x - impactPoint[0];
-                                            const dy = player.y - impactPoint[1];
-                                            const mag = Math.hypot(dx, dy);
+                                            const mag = Math.hypot(pointerVx, pointerVy);
 
-                                            if (mag > MIN_SWIPE_DISTANCE) {
-                                                e.vx = (dx / mag) * 8;
-                                                let new_vy = (dy / mag) * 8;
-                                                e.vy = new_vy < 0 ? 0 : new_vy;
-                                                e.playerDeflected = true; // Prevents weird multi-hits on crystals
+                                            if (mag > 0) {
+                                                e.vx = (pointerVx / mag) * 8;
+                                                let new_vy = (pointerVy / mag) * 8;
+                                                e.vy = new_vy < 0 ? 0 : new_vy; // Prevent shooting crystals off top
+                                                e.playerDeflected = true;
                                             }
                                         }
                                     }
@@ -390,7 +405,6 @@
                                         e.vx = (bot.x > canvas.width / 2 ? -10 : 10);
                                         e.vy = 0;
                                     }
-                                    // Reset deflection so if the bot hits it down, it CAN hurt the player again
                                     e.playerDeflected = false;
                                 }
                             }
@@ -442,6 +456,14 @@
                         ctx.font = '24px Arial';
                         ctx.textAlign = 'right';
                         ctx.fillText(`Score: ${score}`, canvas.width - 20, canvas.height / 2);
+
+                        // Draw the last swipe angle for 3 seconds
+                        if (lastSwipeAngle !== null && (performance.now() - lastSwipeTime) < 3000) {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = '20px Arial';
+                            ctx.textAlign = 'left';
+                            ctx.fillText(`Last Swipe: ${lastSwipeAngle}°`, 20, canvas.height / 2);
+                        }
 
                         ctx.save();
                         ctx.translate(bot.x, bot.y);

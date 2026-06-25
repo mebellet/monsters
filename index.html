@@ -184,34 +184,36 @@
 
                     function spawnEntity() {
                         // CHANCE OF HAZARD VS CRYSTAL (e.g. 0.85 = 85% hazards, 15% crystals)
-                        const isHazard = Math.random() < 0.85;
+                        const isHazard = Math.random() < 0.85; 
                         const dir = Math.random() < 0.5 ? 1 : -1; // 1 = down (to player), -1 = up (to bot)
-
+                        
                         let startVx, startVy, entityColor;
-
+                        
                         if (isHazard) {
-                            startVx = (Math.random() * 4 - 2);
-                            startVy = dir * (Math.random() * 3 + 2);
-
+                            startVx = 0; // FIXED: Hazards no longer drift sideways on spawn
+                            startVy = dir * (Math.random() * 3 + 3);
+                            
                             // PERMANENT COLOR LOGIC: Red if moving to player, Orange if moving to bot
-                            entityColor = startVy > 0 ? '#ff0033' : '#ff8c00';
+                            entityColor = startVy > 0 ? '#ff0033' : '#ff8c00'; 
                         } else {
-                            // CRYSTAL VELOCITY SETTINGS:
-                            startVx = (Math.random() * 2 - 1);
-                            startVy = dir * (Math.random() * 3 + 1);
+                            startVx = 0; // FIXED: Crystals no longer drift sideways on spawn
+                            startVy = dir * (Math.random() * 1.5 + 3);
                             entityColor = '#00ffff'; // Cyan
                         }
-
+                        
+                        const entityRadius = 30;
+                        
                         entities.push({
                             type: isHazard ? 'hazard' : 'crystal',
-                            x: canvas.width / 2 + (Math.random() * 40 - 20),
+                            // FIXED: Spawns anywhere along the X axis, padded by the radius so it doesn't clip the wall
+                            x: entityRadius + Math.random() * (canvas.width - entityRadius * 2),
                             y: canvas.height / 2,
                             vx: startVx,
                             vy: startVy,
-                            radius: 30,
+                            radius: entityRadius,
                             active: true,
                             playerDeflected: false,
-                            color: entityColor
+                            color: entityColor 
                         });
                     }
 

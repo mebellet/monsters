@@ -14,19 +14,20 @@
             --bg-color: #9fb9eb;
         }
 
-        body,
-        html {
+        body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
+            position: fixed; /* NEW: Stops mobile pull-to-refresh & scroll bouncing */
             background-color: #eeb2b2;
         }
 
         #game-container {
             width: 100vw;
-            height: 100vh;
+            height: 100vh; /* Fallback for older browsers */
+            height: 100dvh; /* NEW: Dynamic height respects mobile browser UI bars */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -90,11 +91,13 @@
                     const ctx = canvas.getContext('2d');
 
                     function resizeCanvas() {
-                        canvas.width = window.innerWidth;
-                        canvas.height = window.innerHeight;
+                        const container = document.getElementById('game-container');
+                        // Use container dimensions which respect our new 100dvh CSS
+                        canvas.width = container.clientWidth;
+                        canvas.height = container.clientHeight;
                     }
                     resizeCanvas();
-                    window.addEventListener('resize', resizeCanvas);
+                    // Note: We are deleting the window.addEventListener from here and moving it lower!
 
                     const DASH_VELOCITY_THRESHOLD = 0.15;
 
@@ -160,6 +163,21 @@
                         color: '#ffcc00'
                     };
 
+                    // NEW: Add the dynamic resize listener here
+                    window.addEventListener('resize', () => {
+                        resizeCanvas();
+
+                        // Recalculate anchor positions so they adapt to new screen dimensions
+                        player.homeX = canvas.width / 2;
+                        player.homeY = canvas.height * 0.85;
+                        bot.homeX = canvas.width / 2;
+                        bot.homeY = canvas.height * 0.15;
+
+                        // Ensure they immediately snap to safe bounds if the screen suddenly got smaller
+                        player.y = Math.min(player.y, canvas.height);
+                        bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
+                    });
+
                     let entities = [];
                     let particles = [];
                     let spawnTimer = 0;
@@ -180,7 +198,7 @@
                         } else {
                             // CRYSTAL VELOCITY SETTINGS:
                             startVx = (Math.random() * 2 - 1);
-                            startVy = dir * (Math.random() * 1.5 + 1);
+                            startVy = dir * (Math.random() * 3 + 1);
                             entityColor = '#00ffff'; // Cyan
                         }
 

@@ -324,8 +324,23 @@
                             pointerVy = 0;
                         }
 
-                        bot_offensiveness = Math.min(1.0, timeElapsed / trial.duration);
-
+                        // NEW: Phased bot behavior (Cooperative -> Ramp -> Offensive)
+                        const coopPhaseEnd = 30000; // 30 seconds
+                        const rampPhaseEnd = 50000; // 30s + 20s ramp = 50 seconds
+                        const maxOffensiveness = 0.50; // Maximum 50% hit chance
+                        
+                        if (timeElapsed < coopPhaseEnd) {
+                            // Phase 1: Purely cooperative (0% chance)
+                            bot_offensiveness = 0.0;
+                        } else if (timeElapsed < rampPhaseEnd) {
+                            // Phase 2: Ramping up from 0% to 50% over 20 seconds
+                            const timeInRamp = timeElapsed - coopPhaseEnd;
+                            const rampProgress = timeInRamp / (rampPhaseEnd - coopPhaseEnd); // 0.0 to 1.0 progress through the ramp phase
+                            bot_offensiveness = maxOffensiveness * rampProgress;
+                        } else {
+                            // Phase 3: Maximum offensiveness for the rest of the game
+                            bot_offensiveness = maxOffensiveness;
+                        }
                         if (!pointerDown) {
                             player.x += (player.homeX - player.x) * 0.1;
                             player.y += (player.homeY - player.y) * 0.1;
@@ -348,8 +363,8 @@
                                 }
                             }
                         }
-                        bot.x += (targetX - bot.x) * 0.05;
-                        bot.y += (targetY - bot.y) * 0.05;
+                        bot.x += (targetX - bot.x) * 0.02;
+                        bot.y += (targetY - bot.y) * 0.02;
                         bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
 
                         spawnTimer -= dt;
@@ -429,7 +444,7 @@
 
                                     // BOT COLLISION FIX: If player sent it, 80% chance bot takes damage
                                     if (e.playerDeflected) {
-                                        if (Math.random() < 0.80) {
+                                        if (Math.random() < 0.90) {
                                             score += 100;
                                             bot.flashTimer = 500;
                                             playPositiveChime();

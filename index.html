@@ -11,7 +11,7 @@
     <link href="https://unpkg.com/jspsych@8/css/jspsych.css" rel="stylesheet" type="text/css" />
     <style>
         :root {
-            --bg-color: #9fb9eb;
+            --bg-color: #eeb2b2;
         }
 
         body, html {
@@ -375,8 +375,8 @@
                             spawnBreakTimer -= dt;
                             if (spawnBreakTimer <= 0) {
                                 isSpawnBreakActive = false; // The break is over!
-                                // Schedule the next break (Average 10 seconds: random between 7 and 13 seconds)
-                                timeUntilNextSpawnBreak = 7000 + Math.random() * 6000; 
+                                // Schedule the next break (Average 10 seconds: random between 10 and 15 seconds)
+                                timeUntilNextSpawnBreak = 10000 + Math.random() * 5000; 
                             }
                         } else {
                             timeUntilNextSpawnBreak -= dt;
@@ -392,7 +392,7 @@
                             spawnTimer -= dt;
                             if (spawnTimer <= 0) {
                                 spawnEntity();
-                                spawnTimer = 200 + Math.random() * 200;
+                                spawnTimer = 100 + Math.random() * 200;
                             }
                         }
 

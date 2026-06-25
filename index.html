@@ -181,6 +181,9 @@
                     let entities = [];
                     let particles = [];
                     let spawnTimer = 0;
+                    let isSpawnBreakActive = false;
+                    let spawnBreakTimer = 0;
+                    let timeUntilNextSpawnBreak = 10000; // Wait 10 seconds before the first break
 
                     function spawnEntity() {
                         // CHANCE OF HAZARD VS CRYSTAL (e.g. 0.85 = 85% hazards, 15% crystals)
@@ -367,11 +370,30 @@
                         bot.y += (targetY - bot.y) * 0.02;
                         bot.y = Math.max(bot.radius, Math.min(canvas.height / 2 - bot.radius, bot.y));
 
-                        spawnTimer -= dt;
-                        if (spawnTimer <= 0) {
-                            spawnEntity();
-                            // SPAWN FREQUENCY: Change these numbers to make entities spawn faster or slower
-                            spawnTimer = 300 + Math.random() * 300;
+                        // 1. Manage the random break timers
+                        if (isSpawnBreakActive) {
+                            spawnBreakTimer -= dt;
+                            if (spawnBreakTimer <= 0) {
+                                isSpawnBreakActive = false; // The break is over!
+                                // Schedule the next break (Average 10 seconds: random between 7 and 13 seconds)
+                                timeUntilNextSpawnBreak = 7000 + Math.random() * 6000; 
+                            }
+                        } else {
+                            timeUntilNextSpawnBreak -= dt;
+                            if (timeUntilNextSpawnBreak <= 0) {
+                                isSpawnBreakActive = true; // Start a break!
+                                // Break duration: The screen stops spawning anything for 2 to 3 seconds
+                                spawnBreakTimer = 2000 + Math.random() * 1000; 
+                            }
+                        }
+                        
+                        // 2. Only spawn entities if a break is NOT active
+                        if (!isSpawnBreakActive) {
+                            spawnTimer -= dt;
+                            if (spawnTimer <= 0) {
+                                spawnEntity();
+                                spawnTimer = 200 + Math.random() * 200;
+                            }
                         }
 
                         for (let i = entities.length - 1; i >= 0; i--) {
